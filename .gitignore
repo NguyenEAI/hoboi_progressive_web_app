@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+*.log
+.env*
+!.env.example
+functions/lib
+functions/node_modules
+.firebase
+.vercel
+.DS_Store
+service-account.json
+*service-account*.json
+*-firebase-adminsdk-*.json

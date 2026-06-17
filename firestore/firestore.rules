@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function role() { return request.auth.token.role; }
+    function isOwner() { return isSignedIn() && role() == 'OWNER'; }
+    function isStaff() { return isSignedIn() && role() in ['OWNER','RECEPTIONIST']; }
+    function isCoach() { return isSignedIn() && role() == 'COACH'; }
+    function self(uid) { return isSignedIn() && request.auth.uid == uid; }
+
+    match /users/{uid} {
+      allow read: if isStaff() || isCoach() || self(uid);
+      allow create: if self(uid);
+      allow update: if self(uid) || isOwner();
+      allow delete: if false;
+
+      match /children/{cid} {
+        allow read, write: if self(uid) || isStaff();
+      }
+      match /notifications/{nid} {
+        allow read, update: if self(uid);
+        allow create, delete: if false;
+      }
+    }
+
+    match /products/{id}      { allow read: if true;          allow write: if isOwner(); }
+    match /settings/{id}      { allow read: if true;          allow write: if false; /* via callable */ }
+    match /pricingRules/{id}  { allow read: if true;          allow write: if isOwner(); }
+    match /coaches/{cid}      { allow read: if isSignedIn();  allow write: if isOwner();
+      match /slots/{sid}      { allow read: if isSignedIn();  allow write: if isOwner(); }
+    }
+
+    match /orders/{oid}       {
+      allow read: if isStaff() || resource.data.customerId == request.auth.uid;
+      allow write: if false;
+    }
+    match /payments/{pid}     { allow read: if isStaff(); allow write: if false; }
+    match /memberships/{id}   { allow read: if isStaff() || resource.data.userId == request.auth.uid; allow write: if false; }
+    match /ticketPackages/{id}{ allow read: if isStaff() || resource.data.userId == request.auth.uid; allow write: if false; }
+    match /enrollments/{id}   {
+      allow read: if isStaff() || isCoach()
+                  || resource.data.studentId == request.auth.uid
+                  || resource.data.parentId == request.auth.uid;
+      allow write: if false;
+      match /attendances/{d}  { allow read: if isStaff() || isCoach(); allow write: if false; }
+    }
+    match /checkins/{id}      { allow read: if isStaff() || resource.data.userId == request.auth.uid; allow write: if false; }
+    match /qrTokens/{id}      { allow read: if false; allow write: if false; }
+    match /counters/{id}      { allow read: if false; allow write: if false; }
+    match /auditLogs/{id}     { allow read: if isOwner(); allow write: if false; }
+    // Báo cáo tài chính: chỉ Owner (INV-9 — lễ tân không xem báo cáo tổng)
+    match /dailyStats/{d}     { allow read: if isOwner(); allow write: if false; }
+    match /monthlyStats/{m}   { allow read: if isOwner(); allow write: if false; }
+  }
+}
