@@ -42,7 +42,13 @@ service cloud.firestore {
                   || resource.data.studentId == request.auth.uid
                   || resource.data.parentId == request.auth.uid;
       allow write: if false;
-      match /attendances/{d}  { allow read: if isStaff() || isCoach(); allow write: if false; }
+      // Học viên/phụ huynh xem được lịch sử buổi học của chính mình (cho /my-courses)
+      match /attendances/{d}  {
+        allow read: if isStaff() || isCoach()
+                    || get(/databases/$(database)/documents/enrollments/$(id)).data.studentId == request.auth.uid
+                    || get(/databases/$(database)/documents/enrollments/$(id)).data.parentId == request.auth.uid;
+        allow write: if false;
+      }
     }
     match /checkins/{id}      { allow read: if isStaff() || resource.data.userId == request.auth.uid; allow write: if false; }
     match /qrTokens/{id}      { allow read: if false; allow write: if false; }

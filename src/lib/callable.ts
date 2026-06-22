@@ -12,7 +12,11 @@ export const createOrder = call<
     productType: "PASS" | "PACKAGE" | "SWIM_COURSE";
     duration?: string; packageSize?: string; swimStyle?: string; audience?: string;
     beneficiaryKind: "USER" | "CHILD"; beneficiaryId: string; beneficiaryName: string;
-    coachId?: string; slotId?: string; startDate?: string;
+    coachId?: string;
+    // legacy
+    slotId?: string; startDate?: string;
+    // v2.1: server tự chọn weekday + tính startDate
+    startHour?: number; weekOffset?: number;
   },
   { orderId: string; amountVND: number }
 >("createOrder");
@@ -35,6 +39,10 @@ export const setUserRole = call<
   { phone: string; role: "OWNER" | "RECEPTIONIST" | "COACH" | "CUSTOMER" | "PARENT"; coachId?: string },
   { ok: boolean; uid: string; role: string }
 >("setUserRole");
+export const revokeUserRole = call<
+  { targetUid: string },
+  { ok: boolean; uid: string; from: string }
+>("revokeUserRole");
 
 export const updatePricing = call<{ pricing: unknown }, { ok: boolean }>("updatePricing");
 export const upsertCoach = call<

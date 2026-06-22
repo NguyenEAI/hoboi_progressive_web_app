@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { WavePattern, FloatingOrbs } from "@/components/Decorations";
 import { POOL_INFO } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
+import { normalizeVNPhone, isValidVNPhone10 } from "@/lib/phone";
 import { ArrowLeft, ShieldCheck, Phone, KeyRound, User as UserIcon } from "lucide-react";
 
 type Step = "phone" | "otp" | "name";
@@ -35,16 +36,15 @@ export default function SignInPage() {
     return () => clearTimeout(t);
   }, [resendIn]);
 
-  function normalizePhone(input: string) {
-    if (input.startsWith("+")) return input;
-    return "+84" + input.replace(/\D/g, "").replace(/^0/, "");
-  }
-
   async function sendOtp() {
+    if (!isValidVNPhone10(phone)) {
+      toast.show("Vui lòng nhập đủ 10 số bắt đầu bằng 0", "error");
+      return;
+    }
     setBusy(true);
     try {
       const verifier = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
-      const e164 = normalizePhone(phone);
+      const e164 = normalizeVNPhone(phone);
       setConfirm(await signInWithPhoneNumber(auth, e164, verifier));
       setStep("otp");
       setResendIn(60);
@@ -157,21 +157,24 @@ export default function SignInPage() {
             <div className="mt-1 flex items-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 transition-colors focus-within:border-brand-400">
               <span className="flex items-center gap-1.5 border-r border-slate-200 pr-2.5 text-slate-600">
                 <span aria-hidden>🇻🇳</span>
-                <span className="font-medium">+84</span>
               </span>
               <input
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                inputMode="tel"
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                inputMode="numeric"
                 autoComplete="tel"
-                className="w-full bg-transparent p-3 outline-none placeholder:text-slate-400"
-                placeholder="905 xxx xxx"
+                maxLength={10}
+                className="w-full bg-transparent p-3 outline-none placeholder:text-slate-400 tab-nums"
+                placeholder="0947010978"
               />
             </div>
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              Nhập đủ 10 số (bắt đầu bằng 0). Ví dụ: 0947010978
+            </p>
 
             <button
               onClick={sendOtp}
-              disabled={busy || phone.replace(/\D/g, "").length < 8}
+              disabled={busy || !isValidVNPhone10(phone)}
               className="btn-primary mt-5 w-full"
             >
               {busy ? "Đang gửi…" : "Gửi mã OTP"}
@@ -190,7 +193,7 @@ export default function SignInPage() {
               Nhập mã OTP
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Mã 6 số đã gửi đến <b className="text-slate-700">{normalizePhone(phone)}</b>
+              Mã 6 số đã gửi đến <b className="text-slate-700">{normalizeVNPhone(phone)}</b>
             </p>
 
             <input

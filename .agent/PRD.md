@@ -1,7 +1,7 @@
 # PRD — Hệ thống Quản lý Hồ Bơi Prosper Plaza
 
-> **Phiên bản**: 2.0 (viết lại theo best practices ngành + Luật Bảo vệ Dữ liệu Cá nhân VN 2026)
-> **Ngày cập nhật**: 2026-06-16
+> **Phiên bản**: 2.1 (bổ sung 8 chỉnh sửa UX/nghiệp vụ theo phản hồi UAT 2026-06-17)
+> **Ngày cập nhật**: 2026-06-17
 > **Người chủ sở hữu**: thucludinh@gmail.com (OWNER)
 
 ---
@@ -142,22 +142,61 @@ DRAFT(client) → PENDING_PAYMENT (server) → PAID (staff confirm) → ACTIVE
 ## 5. Tính năng v1 (chốt)
 
 ### 5.1 Khách hàng (Customer / Parent)
-- **Đăng ký 3 bước**: Số ĐT (+84) → OTP → Họ tên. Lưu chiều cao tùy chọn (cần cho audience).
-- **Home**: shortcut Mua thẻ · Mua khóa · Check-in · Thẻ của tôi.
+- **Đăng ký 3 bước**: Số ĐT 10 chữ số đầy đủ (VD `0947010978`) → OTP → Họ tên. Khách nhập nguyên số như trên thẻ SIM; hệ thống tự convert sang E.164 `+84947010978` trước khi gọi Firebase. Lưu chiều cao tùy chọn (cần cho audience). (xem §5.6 quy tắc nhập SĐT)
+- **Home**: shortcut Mua thẻ · Mua khóa · Check-in · Thẻ của tôi · **Khóa học của tôi**.
 - **Mua dịch vụ**: bước "Mua cho ai" (bản thân / con A / con B / nhập trẻ mới). Hiển thị giá realtime từ `/settings/pricing`.
-- **Mua khóa học**: wizard 5 bước (Học cho ai → Chọn kiểu → Chọn HLV → Chọn ca → Xác nhận).
+- **Mua khóa học**: wizard **4 bước** (Học cho ai → Chọn kiểu → Chọn HLV → **Chọn ca (gộp khung giờ theo tuần)** → Xác nhận). Bỏ bước "chọn ngày bắt đầu"; ngày bắt đầu = ngày dạy đầu tiên trong tuần kế tiếp tính từ ngày tạo đơn, server tự tính (xem §5.7).
 - **Ví thẻ điện tử**: mỗi thẻ render giống y thẻ cứng (mặt trước + mặt sau ô lượt cho gói lượt).
+- **Khóa học của tôi** ⭐ mới: route `/my-courses` — danh sách enrollment của bản thân + của các con (ACTIVE / COMPLETED / EXPIRED / CANCELLED). Chi tiết xem §5.5.
 - **Check-in**: chọn số người → preview "Sẽ dùng thẻ X, trừ Y lượt" → quét QR cổng. Nếu thiếu lượt → đề xuất mua vé lẻ tại quầy.
 - **Trẻ em**: thêm/sửa/xóa hồ sơ con (tên, ngày sinh, chiều cao → tự tính audience).
 - **Thông báo**: in-app + FCM Web Push (cần Add-to-Home-Screen trên iOS).
 - **Hồ sơ**: sửa tên, đổi avatar (tùy chọn), logout.
 
+### 5.5 "Khóa học của tôi" — đặc tả chi tiết (mới v2.1)
+Route `/my-courses` cho CUSTOMER/PARENT, hiển thị toàn bộ enrollment liên quan đến UID hiện tại (bản thân — `studentKind=USER`, hoặc con — `studentKind=CHILD` với `parentId=uid`).
+
+**Danh sách (list view):**
+- Mỗi card hiển thị: emoji + tên kiểu bơi, người học (tên bản thân hoặc tên con + chip "Con"), HLV, lịch học gộp (VD "T3-T5-T7 · 14h–15h"), tiến độ buổi (progress bar X/15), số ngày còn lại đến `expiryDate`, chip trạng thái (Đang học / Hoàn thành / Hết hạn / Đã hủy).
+- Sort: ACTIVE trước (gần hết hạn lên đầu) → COMPLETED → EXPIRED/CANCELLED. Lọc tab "Đang học" / "Tất cả".
+- Empty state: CTA "Đăng ký khóa mới" → điều hướng đến wizard `/services/course`.
+
+**Chi tiết (tap vào 1 card):**
+- Header: emoji + tên kiểu bơi, mã thẻ (`memberCode`), chip trạng thái.
+- Thông tin người học: tên, audience, nếu là con thì hiển thị "Con của bạn".
+- HLV: tên + nút "💬 Nhắn Zalo HLV" (deeplink `zalo.me/{phone}`).
+- Lịch học: weekday cố định + khung giờ + "Ngày học gần nhất: …" (tính từ now + slot.weekday).
+- Tiến độ: progress bar `attendedSessions/15`, hiển thị `startDate → expiryDate`, đếm ngược ngày còn lại.
+- **Lịch sử buổi học**: đọc subcollection `/enrollments/{id}/attendances` — danh sách ngày + nguồn điểm danh (QR/Lễ tân).
+- **Cảnh báo**: nếu còn ≤10 buổi hoặc ≤7 ngày → banner màu cam; nếu EXPIRED → banner đỏ kèm lý do.
+- Thông báo liên quan: filter `/users/{uid}/notifications` theo `type ∈ {COURSE_REMAINING, COURSE_EXPIRED, EXPIRY_WARNING}` (chỉ hiển thị 5 cái mới nhất).
+
+**Không có trong v1**: học bù tự động, đổi ca, gia hạn khóa (theo INV-2 buổi mất là mất).
+
+### 5.6 Quy tắc nhập số điện thoại (cập nhật v2.1)
+- Input chấp nhận **10 chữ số bắt đầu bằng 0** (chuẩn người dùng VN ghi nhớ). VD hợp lệ: `0947010978`.
+- Bỏ chip "+84" prefix trong UI signin (gây nhầm lẫn vì khách quen ghi đủ 10 số).
+- Validation: regex `/^0\d{9}$/`. Báo lỗi tiếng Việt nếu sai format.
+- Trước khi gọi `signInWithPhoneNumber` / `setUserRole` / `staffCheckinByPhone`: helper `normalizeVNPhone()` convert `0xxxxxxxxx` → `+84xxxxxxxxx`.
+- Hiển thị lại số điện thoại trong UI dưới dạng `0947 010 978` (format 3-3-4) cho dễ đọc.
+
+### 5.7 Wizard khóa học — quy tắc hiển thị ca (cập nhật v2.1)
+- Sau khi chọn HLV, không liệt kê 10 ca/ngày × 3 ngày (≥30 dòng rối mắt). Thay vào đó **gộp slot theo khung giờ** vì mỗi HLV có lịch cố định 3 weekday giống nhau:
+  - Ví dụ Thầy Tín (T3/T5/T7): chỉ hiển thị 10 dòng — `07h-08h (T3-T5-T7)`, `08h-09h (T3-T5-T7)`, ..., `19h-20h (T3-T5-T7)`.
+  - Mỗi dòng hiển thị sĩ số trung bình của 3 ngày: "Còn X chỗ" (lấy `min(20 - enrolledCount)` qua 3 weekday).
+- Khi khách chọn, server `createOrder` tự chọn **ngày dạy gần nhất** trong tuần đến (tính `nextOccurrence(weekday, now)`); nếu hôm đó đã quá giờ thì lùi 1 tuần.
+- Bỏ bước "Chọn ngày bắt đầu" → từ chọn ca đi thẳng sang xác nhận. Khách thấy `startDate` được hệ thống đề xuất trên màn xác nhận; nếu muốn lùi thêm tuần thì có nút "+1 tuần / −1 tuần" (giới hạn ±4 tuần).
+
 ### 5.2 Lễ tân (Receptionist)
-- **Dashboard nhanh**: đơn pending hôm nay · check-in hôm nay · doanh thu hôm nay (KHÔNG tổng/tháng).
-- **Đăng ký khách mới**: nhập SĐT → nếu chưa có tạo bản ghi → bán dịch vụ ngay tại quầy.
+- **Dashboard nhanh**: đơn pending hôm nay · check-in hôm nay · doanh thu hôm nay **chia theo loại sản phẩm × đối tượng** (VD "3 khóa học = 5.400.000₫ · 3 vé tháng người lớn = 1.500.000₫"). KHÔNG hiển thị tổng tháng/năm (INV-9).
+- **Đăng ký khách mới**: nhập SĐT 10 số → nếu chưa có tạo bản ghi → bán dịch vụ ngay tại quầy.
 - **Xác nhận thanh toán**: tap đơn pending → "Xác nhận đã nhận tiền mặt" → đơn chuyển PAID, thẻ kích hoạt.
-- **Check-in hộ**: nhập SĐT → preview → confirm. Đặc biệt cho **trẻ đi học một mình** (INV-7).
-- **Quản lý đơn**: lọc theo trạng thái + ngày, nhóm theo ngày (Hôm nay/Hôm qua/Ngày DD/MM).
+- **Check-in hộ**: nhập SĐT 10 số → preview → confirm. Đặc biệt cho **trẻ đi học một mình** (INV-7).
+- **Quản lý đơn** (cập nhật v2.1):
+  - Lọc theo trạng thái (Pending/Paid/Cancelled/Refunded) + theo loại sản phẩm.
+  - **Lịch sử theo ngày/tháng/năm**: date-range picker (preset Hôm nay / Hôm qua / 7 ngày / Tháng này / Tháng trước / Năm này / chọn ngày bất kỳ). VD "xem đơn hàng ngày 15/06/2026".
+  - Nhóm hiển thị theo ngày (Hôm nay/Hôm qua/Ngày DD/MM).
+  - **Thao tác xóa đơn**: Lễ tân chỉ thấy nút "Hủy đơn" cho PENDING; **xóa hẳn** (`deleteOrder`) chỉ Owner (INV-9).
 - **Quản lý khách**: search SĐT/tên, xem thẻ + lịch sử check-in.
 - **Gia hạn thẻ**: chọn khách + chọn gói có sẵn → tạo đơn PENDING.
 
@@ -166,14 +205,26 @@ DRAFT(client) → PENDING_PAYMENT (server) → PAID (staff confirm) → ACTIVE
 - **Học viên**: từng HV có nút Zalo (deeplink `zalo.me/{phone}`), ghi chú riêng, đánh dấu vắng.
 - **Báo nghỉ dạy**: chọn ca + lý do → push tự động cho HV trong ca đó.
 - **Cảnh báo vắng nhiều**: HV vắng ≥ 3 buổi liên tiếp → highlight + gợi ý nhắn Zalo.
+- **Đăng xuất** ⭐ mới v2.1: layout `(coach)` thêm nút logout ở header (hoặc menu tài khoản) — hiện đang chưa có, HLV không thoát ra được tài khoản test.
 
 ### 5.4 Chủ hồ bơi (Owner)
 - **Tất cả của Lễ tân +**:
-- **Báo cáo doanh thu**: realtime từ `/orders` PAID (KHÔNG đợi cron). Chia 3 chiều: theo loại (vé thời hạn / gói lượt / khóa học), theo đối tượng (3 nhóm), theo ngày (bar chart 30 ngày gần nhất).
+- **Báo cáo doanh thu** (cập nhật v2.1): realtime từ `/orders` PAID (KHÔNG đợi cron). 
+  - **Bộ lọc thời gian**: chọn "Theo ngày" (1 ngày bất kỳ) / "Theo tháng" (MM/YYYY) / "Theo năm" (YYYY) / "Khoảng tùy chỉnh". Default = tháng hiện tại.
+  - **Phân loại** (chính): bảng chéo **Loại sản phẩm × Đối tượng** với số lượng đơn + tổng tiền. VD ô "Khóa học bơi × Người lớn = 3 đơn / 5.400.000₫"; ô "Vé tháng × Người lớn = 1 đơn / 500.000₫".
+  - **Biểu đồ phụ**: bar chart theo ngày (khi lọc tháng) / theo tháng (khi lọc năm).
+  - **Tổng doanh thu** + **đếm số khách unique** ở header.
+  - Có nút "Xuất CSV" (optional, làm sau nếu kịp).
 - **Sửa bảng giá** (`/admin/products`): UI matrix realtime, lưu vào `/settings/pricing`, khách thấy ngay.
 - **CRUD HLV** (`/admin/coaches`): thêm/sửa/khóa, tự tạo 10 ca/ngày cho mỗi ngày dạy. Bảo vệ không xóa HLV có HV đang học.
-- **Phân quyền** (`/admin/staff`): tap khách → đổi role (callable `setUserRole`).
-- **Xóa đơn PENDING** lỡ tạo nhầm.
+- **Phân quyền** (`/admin/staff`) (cập nhật v2.1):
+  - Tap khách → đổi role (callable `setUserRole`).
+  - **Gỡ quyền** ⭐ mới: với user role ≠ CUSTOMER, hiển thị nút "Gỡ quyền" → đặt role về `CUSTOMER` + clear custom claim + audit log `REVOKE_ROLE`. Confirm dialog hiển thị role hiện tại + cảnh báo "user sẽ mất quyền truy cập trang quản trị/coach ngay".
+  - Bảo vệ: không cho phép Owner tự gỡ quyền của chính mình (tránh khóa hệ thống). Phải có ít nhất 1 OWNER khác trước khi gỡ.
+  - Bảng list: cột "Cấp ngày" (ngày cấp role gần nhất, đọc từ auditLogs).
+- **Xóa đơn** (cập nhật v2.1):
+  - PENDING: xóa hẳn (`deleteOrder`) — đã có.
+  - PAID/CANCELLED/REFUNDED: cho phép **xóa cứng** với confirm 2 lớp + bắt buộc lý do, ghi audit `DELETE_ORDER` (chỉ xóa doc order, các thẻ/payment đã sinh giữ nguyên với cờ `orderDeleted: true`). Dùng để clean dữ liệu test khi launch.
 - **Hoàn tiền PAID**: bắt buộc nhập lý do, khóa thẻ, push lý do cho khách, ghi audit log.
 - **QR Gate** (`/admin/qr-gate`): màn hình tablet ở cổng, QR rotation 30s, full-screen, prevent screen lock.
 
@@ -216,15 +267,16 @@ Khách mở /checkin → chọn số người đi cùng (cho gói lượt)
    → if invalid (thiếu lượt/sai audience): show lỗi + gợi ý mua vé lẻ
 ```
 
-### 7.3 Đăng ký khóa học
+### 7.3 Đăng ký khóa học (v2.1 — rút từ 5 → 4 bước)
 ```
 Home → "Khóa học bơi" → Wizard:
    B1: Học cho ai? (tôi/con)
    B2: Kiểu bơi? (ếch/sải/ngửa/bướm) — cùng giá
    B3: HLV? (Tùng T4/T6/CN, Tín T3/T5/T7)
-   B4: Ca? (sáng/chiều × 10 ca, hiển thị "X/20")
-   B5: Xác nhận giá 1.800k + ngày bắt đầu
-→ Đơn PENDING + giữ chỗ slot 24h
+   B4: Ca? gộp theo khung giờ — VD "14h–15h (T3-T5-T7)" + "Còn N chỗ"
+      → Bỏ bước chọn ngày bắt đầu
+   B5: Xác nhận — server tự tính startDate = ngày dạy gần nhất (có nút ±tuần)
+→ Đơn PENDING + giữ chỗ slot 24h (cộng enrolledCount cho 1 trong 3 weekday)
 → Confirm PAID → enrollment ACTIVE, 90 ngày, 15 buổi
 ```
 
@@ -395,7 +447,23 @@ App được coi là **sẵn sàng launch** khi tất cả các mục sau pass:
 | Phiên bản | Ngày | Người | Nội dung |
 |---|---|---|---|
 | 1.0 | 2026-06-14 | Claude + Owner | PRD ban đầu, sau khi đóng băng spec để code |
-| **2.0** | **2026-06-16** | **Claude (Opus 4.7) + Deep Research** | **Viết lại theo best practices ngành + PDPL 2026. Thêm INV-11~14, §11 PDPL, §12 acceptance criteria, §10 risk matrix** |
+| 2.0 | 2026-06-16 | Claude (Opus 4.7) + Deep Research | Viết lại theo best practices ngành + PDPL 2026. Thêm INV-11~14, §11 PDPL, §12 acceptance criteria, §10 risk matrix |
+| **2.1** | **2026-06-17** | **Claude (Opus 4.7) + Owner feedback (UAT)** | **8 chỉnh sửa nghiệp vụ/UX (xem §14)** |
+
+---
+
+## 14. v2.1 Changeset — 8 chỉnh sửa từ feedback UAT 2026-06-17
+
+| # | Khu vực | Trước | Sau v2.1 | Section liên quan |
+|---|---|---|---|---|
+| C1 | UI Coach | Layout coach không có nút logout | Thêm logout vào header coach | §5.3 |
+| C2 | Wizard khóa học | 5 bước, liệt kê 10 ca × 3 weekday, chọn ngày bắt đầu | 4 bước; gộp ca theo khung giờ (T3-5-7); server tự chọn startDate | §5.1, §5.7, §7.3 |
+| C3 | Đơn hàng | Không có xóa cứng đơn PAID; không có lịch sử theo ngày | Owner xóa cứng có lý do + audit; date-range filter (ngày/tháng/năm) | §5.2, §5.4 |
+| C4 | Signin | UI "+84" + người dùng nhập 9 số sau 0 | Người dùng nhập đủ 10 số (`0947010978`); helper normalize sang E.164 | §5.1, §5.6 |
+| C5 | Phân quyền | Chỉ gán role, không gỡ | Thêm "Gỡ quyền" về CUSTOMER + bảo vệ Owner cuối cùng + audit `REVOKE_ROLE` | §5.4 |
+| C6 | Dashboard Lễ tân & Owner | Tổng tiền chung 1 con số | Bảng chéo Loại × Đối tượng (VD "3 khóa = 5.4M, 3 vé tháng người lớn = 1.5M") | §5.2, §5.4 |
+| C7 | Báo cáo doanh thu Owner | Cố định bar chart 30 ngày | Filter Ngày/Tháng/Năm/Tùy chỉnh + bar chart phù hợp | §5.4 |
+| C8 | Khách hàng — "Khóa học của tôi" | Chưa có | Route `/my-courses` + chi tiết enrollment + attendances + Zalo HLV | §5.1, §5.5 |
 
 ---
 

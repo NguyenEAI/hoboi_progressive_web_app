@@ -46,6 +46,53 @@ export const setUserRole = onCall({ region: REGION }, async (req) => {
   return { ok: true, uid: user.uid, role };
 });
 
+/**
+ * Gỡ quyền: hạ role về CUSTOMER + clear custom claim.
+ * Bảo vệ: không cho Owner tự gỡ chính mình; phải còn ≥1 OWNER khác.
+ */
+export const revokeUserRole = onCall({ region: REGION }, async (req) => {
+  const callerRole = req.auth?.token?.role;
+  if (callerRole !== "OWNER")
+    throw new HttpsError("permission-denied", "Chỉ Owner được gỡ quyền");
+
+  const { targetUid } = req.data as { targetUid: string };
+  if (!targetUid) throw new HttpsError("invalid-argument", "Thiếu targetUid");
+  if (targetUid === req.auth!.uid)
+    throw new HttpsError("failed-precondition", "Không thể tự gỡ quyền của chính mình");
+
+  const targetRef = db().doc(`users/${targetUid}`);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists) throw new HttpsError("not-found", "Không tìm thấy user");
+  const fromRole = (targetSnap.data()!.role as Role) ?? "CUSTOMER";
+  if (fromRole === "CUSTOMER")
+    throw new HttpsError("failed-precondition", "User này đã ở vai trò CUSTOMER");
+
+  if (fromRole === "OWNER") {
+    const owners = await db().collection("users").where("role", "==", "OWNER").get();
+    if (owners.size <= 1)
+      throw new HttpsError("failed-precondition", "Phải còn ít nhất 1 OWNER khác trong hệ thống");
+  }
+
+  await admin.auth().setCustomUserClaims(targetUid, { role: "CUSTOMER" });
+  await targetRef.set({ role: "CUSTOMER" }, { merge: true });
+
+  // Nếu user trước là COACH, gỡ liên kết coaches/{...}.userId
+  if (fromRole === "COACH") {
+    const linked = await db().collection("coaches").where("userId", "==", targetUid).get();
+    const batch = db().batch();
+    linked.forEach((d) => batch.update(d.ref, { userId: null }));
+    if (!linked.empty) await batch.commit();
+  }
+
+  await db().collection("auditLogs").add({
+    actorId: req.auth!.uid, action: "REVOKE_ROLE",
+    targetType: "user", targetId: targetUid,
+    detail: { from: fromRole, to: "CUSTOMER" },
+    at: admin.firestore.Timestamp.now(),
+  });
+  return { ok: true, uid: targetUid, from: fromRole };
+});
+
 // Chuẩn hóa SĐT Việt Nam về E.164.
 // Chấp nhận: "+84905...", "0905...", "905...", "84 905 ...", có dấu cách/gạch.
 function normalizeVNPhone(input: string): string | null {

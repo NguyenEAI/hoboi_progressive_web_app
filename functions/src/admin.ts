@@ -116,19 +116,31 @@ function slugify(s: string): string {
 }
 
 // ============== DELETE ORDER ==============
-// Chỉ xoá đơn PENDING_PAYMENT (khách chọn nhầm). Trả slot nếu là khóa học.
+// Quy tắc:
+// - PENDING_PAYMENT: cho phép xóa không cần lý do (khách chọn nhầm). Trả slot nếu là khóa học.
+// - PAID / CANCELLED / REFUNDED: bắt buộc nhập lý do. Xóa cứng doc order nhưng giữ thẻ/payment
+//   liên quan, chỉ gắn cờ `orderDeleted: true` để tách bạch khỏi báo cáo doanh thu mới.
+//   Hoàn tiền vẫn dùng `refundOrder` riêng (delete KHÔNG tự refund).
 export const deleteOrder = onCall({ region: REGION }, async (req) => {
   requireOwner(req);
   const { orderId, reason } = req.data as { orderId: string; reason?: string };
   const orderRef = db().doc(`orders/${orderId}`);
+
+  let prevStatus = "";
+  let productType = "";
+
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(orderRef);
     if (!snap.exists) throw new HttpsError("not-found", "Đơn không tồn tại");
     const o = snap.data()!;
-    if (o.status !== "PENDING_PAYMENT")
-      throw new HttpsError("failed-precondition",
-        "Chỉ xóa được đơn chưa thanh toán. Đơn đã PAID dùng chức năng 'Hoàn tiền'.");
-    if (o.productType === "SWIM_COURSE" && o.coachId && o.slotId) {
+    prevStatus = o.status;
+    productType = o.productType;
+
+    if (o.status !== "PENDING_PAYMENT" && (!reason || !String(reason).trim()))
+      throw new HttpsError("invalid-argument",
+        "Xóa đơn đã thanh toán/hủy/hoàn cần bắt buộc nhập lý do.");
+
+    if (o.status === "PENDING_PAYMENT" && o.productType === "SWIM_COURSE" && o.coachId && o.slotId) {
       const slotRef = db().doc(`coaches/${o.coachId}/slots/${o.slotId}`);
       const slot = await tx.get(slotRef);
       if (slot.exists)
@@ -136,9 +148,21 @@ export const deleteOrder = onCall({ region: REGION }, async (req) => {
     }
     tx.delete(orderRef);
   });
+
+  // Đối với đơn đã PAID/CANCELLED/REFUNDED: gắn cờ vào thẻ/payment liên quan (ngoài transaction)
+  if (prevStatus !== "PENDING_PAYMENT") {
+    for (const col of ["memberships", "ticketPackages", "enrollments", "payments"] as const) {
+      const q = await db().collection(col).where("orderId", "==", orderId).get();
+      const batch = db().batch();
+      q.forEach((d) => batch.update(d.ref, { orderDeleted: true, orderDeletedAt: FV.serverTimestamp() }));
+      if (!q.empty) await batch.commit();
+    }
+  }
+
   await db().collection("auditLogs").add({
     actorId: req.auth!.uid, action: "DELETE_ORDER",
-    targetType: "order", targetId: orderId, detail: { reason: reason ?? null },
+    targetType: "order", targetId: orderId,
+    detail: { reason: reason ?? null, prevStatus, productType },
     at: admin.firestore.Timestamp.now(),
   });
   return { ok: true };

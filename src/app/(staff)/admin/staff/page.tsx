@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { setUserRole } from "@/lib/callable";
+import { setUserRole, revokeUserRole } from "@/lib/callable";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
+import { normalizeVNPhone, isValidVNPhone10, displayVNPhone } from "@/lib/phone";
 import type { User, Coach } from "@/types";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -31,9 +32,13 @@ export default function StaffPage() {
     return <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">🔒 Chỉ chủ hồ bơi (Owner) được quản lý nhân viên.</p>;
 
   async function submit() {
+    if (!isValidVNPhone10(form.phone)) {
+      setMsg("❌ Vui lòng nhập đủ 10 số bắt đầu bằng 0");
+      return;
+    }
     setBusy(true); setMsg(undefined);
     try {
-      const phone = form.phone.startsWith("+") ? form.phone : "+84" + form.phone.replace(/\D/g, "").replace(/^0/, "");
+      const phone = normalizeVNPhone(form.phone);
       const r = await setUserRole({
         phone,
         role: form.role as "RECEPTIONIST" | "COACH",
@@ -45,11 +50,15 @@ export default function StaffPage() {
     } catch (e) { setMsg("❌ " + (e as Error).message); } finally { setBusy(false); }
   }
 
-  async function removeRole(phone: string) {
-    if (!confirm(`Gỡ quyền nhân viên của ${phone}? Tài khoản sẽ trở lại làm khách hàng.`)) return;
+  async function removeRole(u: User) {
+    const display = displayVNPhone(u.phone) || u.phone;
+    if (!confirm(
+      `Gỡ quyền ${ROLE_LABEL[u.role]} của ${u.fullName || display}?\n\n` +
+      `Tài khoản sẽ trở lại CUSTOMER và mất quyền truy cập trang quản trị/HLV ngay sau khi token refresh.`,
+    )) return;
     try {
-      await setUserRole({ phone, role: "CUSTOMER" });
-      setMsg(`✅ Đã gỡ quyền của ${phone}.`);
+      const r = await revokeUserRole({ targetUid: u.id });
+      setMsg(`✅ Đã gỡ quyền ${ROLE_LABEL[r.from]} của ${u.fullName || display}.`);
     } catch (e) { setMsg("❌ " + (e as Error).message); }
   }
 
@@ -72,8 +81,9 @@ export default function StaffPage() {
           <div className="mt-3 space-y-2">
             <div>
               <label className="text-xs font-medium">Số điện thoại</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="0905 xxx xxx" className="mt-1 w-full rounded-xl border-2 border-slate-200 bg-white p-2.5" />
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                inputMode="numeric" maxLength={10}
+                placeholder="0947010978" className="mt-1 w-full rounded-xl border-2 border-slate-200 bg-white p-2.5 tab-nums" />
             </div>
             <div>
               <label className="text-xs font-medium">Vai trò</label>
@@ -116,15 +126,16 @@ export default function StaffPage() {
             {users.map((u) => (
               <tr key={u.id} className="border-t border-slate-50 hover:bg-slate-50">
                 <td className="p-3 font-medium">{u.fullName || "—"}</td>
-                <td className="p-3">{u.phone}</td>
+                <td className="p-3 tab-nums">{displayVNPhone(u.phone) || u.phone}</td>
                 <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs ${u.role === "OWNER" ? "bg-red-100 text-red-700" : u.role === "COACH" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
                   {ROLE_LABEL[u.role]}
                 </span></td>
                 <td className="p-3">
-                  {u.role !== "OWNER" && u.phone && (
-                    <button onClick={() => removeRole(u.phone)} className="rounded-lg border-2 border-red-200 px-3 py-1 text-xs text-red-600">Gỡ quyền</button>
+                  {u.id === profile?.id ? (
+                    <span className="text-xs text-slate-400">(chính bạn)</span>
+                  ) : (
+                    <button onClick={() => removeRole(u)} className="rounded-lg border-2 border-red-200 px-3 py-1 text-xs font-semibold text-red-600">Gỡ quyền</button>
                   )}
-                  {u.role === "OWNER" && <span className="text-xs text-slate-400">(không gỡ được Owner)</span>}
                 </td>
               </tr>
             ))}

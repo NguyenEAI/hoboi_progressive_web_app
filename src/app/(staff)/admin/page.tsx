@@ -7,6 +7,7 @@ import { formatVND } from "@/lib/utils";
 import { POOL_INFO } from "@/lib/constants";
 import type { Order } from "@/types";
 import { TrendingUp, Calendar, Coins, AlertCircle, ShieldOff, BookOpen, Ticket, PackageOpen } from "lucide-react";
+import { CrossTable, buildMatrix } from "@/components/CrossTable";
 
 export default function AdminDashboardPage() {
   const { profile } = useAuthUser();
@@ -24,11 +25,12 @@ export default function AdminDashboardPage() {
     const subs: (() => void)[] = [];
     subs.push(onSnapshot(query(collection(db, "orders"), where("status", "==", "PENDING_PAYMENT")),
       (s) => setPending(s.size)));
+    // Hôm nay: cả Owner và Lễ tân đều thấy breakdown (operational info, không phải tổng tháng)
+    subs.push(onSnapshot(
+      query(collection(db, "orders"), where("status", "==", "PAID"),
+        where("paidAt", ">=", Timestamp.fromDate(todayStart))),
+      (s) => setPaidToday(s.docs.map((d) => d.data() as Order))));
     if (isOwner) {
-      subs.push(onSnapshot(
-        query(collection(db, "orders"), where("status", "==", "PAID"),
-          where("paidAt", ">=", Timestamp.fromDate(todayStart))),
-        (s) => setPaidToday(s.docs.map((d) => d.data() as Order))));
       subs.push(onSnapshot(
         query(collection(db, "orders"), where("status", "==", "PAID"),
           where("paidAt", ">=", Timestamp.fromDate(monthStart))),
@@ -38,6 +40,7 @@ export default function AdminDashboardPage() {
   }, [isOwner]);
 
   const todayRevenue = paidToday.reduce((s, o) => s + (o.amountVND ?? 0), 0);
+  const todayMatrix = buildMatrix(paidToday);
   const byType = paidMonth.reduce((acc, o) => {
     acc[o.productType] = (acc[o.productType] ?? 0) + (o.amountVND ?? 0);
     return acc;
@@ -72,14 +75,12 @@ export default function AdminDashboardPage() {
             value={pending}
             accent="warning"
           />
-          {isOwner && (
-            <KpiCard
-              icon={<TrendingUp className="size-5" />}
-              label="Đơn đã thu hôm nay"
-              value={paidToday.length}
-              accent="default"
-            />
-          )}
+          <KpiCard
+            icon={<TrendingUp className="size-5" />}
+            label="Đơn đã thu hôm nay"
+            value={paidToday.length}
+            accent="default"
+          />
           {isOwner && (
             <KpiCard
               icon={<Coins className="size-5" />}
@@ -88,6 +89,11 @@ export default function AdminDashboardPage() {
               accent="primary"
             />
           )}
+        </div>
+
+        {/* Bảng chéo Loại sản phẩm × Đối tượng — hôm nay */}
+        <div className="mt-4">
+          <CrossTable matrix={todayMatrix} hideTotal={!isOwner} />
         </div>
       </section>
 

@@ -3,7 +3,7 @@ admin.initializeApp();
 
 export { createOrder, confirmPayment, cancelOrder, refundOrder } from "./orders";
 export { issueQrToken, checkinByQr, staffCheckinByPhone } from "./checkin";
-export { setUserRole } from "./staff";
+export { setUserRole, revokeUserRole } from "./staff";
 export { updatePricing, upsertCoach, setCoachActive, deleteOrder } from "./admin";
 export {
   expireServicesDaily,

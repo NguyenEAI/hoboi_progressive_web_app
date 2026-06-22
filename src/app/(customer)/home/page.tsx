@@ -12,7 +12,7 @@ import { formatDate, daysUntil } from "@/lib/utils";
 import { PASS_DURATIONS, SWIM_STYLES } from "@/lib/constants";
 import Link from "next/link";
 import {
-  Camera, CreditCard, ShoppingBag, Bell, ChevronRight, Sparkles,
+  Camera, CreditCard, ShoppingBag, Bell, ChevronRight, Sparkles, BookOpen,
 } from "lucide-react";
 
 const passLabel = (d: string) => PASS_DURATIONS.find((x) => x.id === d)?.label ?? "Vé";
@@ -203,6 +203,12 @@ export default function HomePage() {
             label="Thông báo"
             sub={unreadCount ? `${unreadCount} chưa đọc` : "Tin tức"}
             badge={unreadCount}
+          />
+          <Shortcut
+            href="/my-courses"
+            icon={<BookOpen className="size-7" />}
+            label="Khóa học của tôi"
+            sub={enrolls.length ? `${enrolls.length} đang học` : "Tiến độ & lịch sử"}
           />
         </div>
       </section>

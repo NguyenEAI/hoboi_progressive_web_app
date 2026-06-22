@@ -1,8 +1,8 @@
 # Implementation Plan — Hồ Bơi Prosper Plaza
 
-> **Phiên bản**: 2.0 (viết lại theo best practices Firebase + Next.js 15 cập nhật 2026-06)
-> **Tài liệu mẹ**: [`PRD.md`](./PRD.md)
-> **Trạng thái dự án**: Phase 1–9 ✅ · Đang UAT · Vercel chưa
+> **Phiên bản**: 2.2 (bổ sung 8 chỉnh sửa UAT v2.1 của PRD — xem §17)
+> **Tài liệu mẹ**: [`PRD.md`](./PRD.md) v2.1
+> **Trạng thái dự án**: Phase 1–10 ✅ · Đang UAT (round 3 — UI/UX feedback) · Vercel chưa
 
 ---
 
@@ -45,25 +45,27 @@ D:\Hoboi_version2\
 │  │  │  ├ signin/                 OTP 3 bước: phone → otp → tên
 │  │  │  └ privacy/                ⭐ trang Chính sách quyền riêng tư (PDPL)
 │  │  ├ (customer)/
-│  │  │  ├ home/                   shortcut grid
+│  │  │  ├ home/                   shortcut grid (thêm "Khóa học của tôi")
 │  │  │  ├ services/               mua vé tháng/gói lượt + "Mua cho ai"
-│  │  │  ├ services/course/        wizard 5 bước
+│  │  │  ├ services/course/        wizard 4 bước (v2.1: gộp ca theo khung giờ)
 │  │  │  ├ cards/                  ví thẻ điện tử (front + back)
+│  │  │  ├ my-courses/             ⭐ v2.1 — list + detail enrollment + attendances
 │  │  │  ├ checkin/                preview + scan QR
 │  │  │  ├ children/               CRUD trẻ em
 │  │  │  ├ notifications/          inbox
 │  │  │  └ profile/                sửa tên + Add-to-Home-Screen hint
 │  │  ├ (staff)/admin/
 │  │  │  ├ page.tsx                dashboard realtime
-│  │  │  ├ orders/                 nhóm theo ngày + xóa PENDING (Owner)
+│  │  │  ├ orders/                 nhóm theo ngày + xóa PENDING (Owner) + v2.1: date-range filter + xóa cứng PAID có lý do
 │  │  │  ├ products/               Owner-only matrix sửa giá
 │  │  │  ├ coaches/                CRUD HLV
 │  │  │  ├ customers/              search + thời gian đăng ký
-│  │  │  ├ staff/                  phân quyền role qua callable
-│  │  │  ├ reports/                ⭐ Owner-only · realtime từ orders PAID
+│  │  │  ├ staff/                  phân quyền role + v2.1: nút "Gỡ quyền" về CUSTOMER
+│  │  │  ├ reports/                ⭐ Owner-only · realtime · v2.1: filter Ngày/Tháng/Năm + bảng chéo Loại × Đối tượng
 │  │  │  ├ qr-gate/                tablet cổng · QR rotation 30s · fullscreen
 │  │  │  └ checkin-assist/         điểm danh hộ qua SĐT
 │  │  └ (coach)/coach/
+│  │     ├ layout.tsx              ⭐ v2.1: header có nút Đăng xuất
 │  │     ├ page.tsx                lịch dạy hôm nay
 │  │     └ students/               danh sách + Zalo deeplink
 │  ├ components/
@@ -301,7 +303,8 @@ function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
 | `confirmPayment` | Xác nhận PAID, sinh thẻ, kích hoạt dịch vụ | Staff | ✅ — sinh memberCode + ghi membership/package/enrollment + audit |
 | `cancelOrder` | Hủy đơn chưa thanh toán | Staff (Owner cho PAID-cancel) | ✅ — trả slot nếu COURSE |
 | `refundOrder` | **Owner only**, bắt buộc lý do | Owner | ✅ — khóa thẻ + audit + push |
-| `deleteOrder` | **Owner only**, xóa đơn PENDING khách chọn nhầm | Owner | — |
+| `deleteOrder` | **Owner only**, xóa đơn PENDING khách chọn nhầm; v2.1 mở rộng cho PAID/CANCELLED/REFUNDED khi cần clean data — bắt buộc lý do, không xóa thẻ/payment đã sinh (gắn cờ `orderDeleted:true`) | Owner | ✅ (v2.1) |
+| `revokeUserRole` ⭐ v2.1 | **Owner only**, hạ role về CUSTOMER + clear custom claim; bảo vệ "ít nhất 1 OWNER" + không gỡ chính mình | Owner | ✅ |
 | `issueQrToken` | Tablet cổng gọi mỗi 30s | Staff (gate kiosk) | — |
 | `checkinByQr` | Khách quét QR, check-in nhóm | signed-in | ✅ — verify nonce + atomic trừ `ticketPackage.remaining` |
 | `staffCheckinByPhone` | Lễ tân điểm danh hộ qua SĐT | Staff | ✅ |
@@ -581,7 +584,8 @@ npx tsx seed/setRole.ts +84947010978 OWNER
 |---|---|---|---|
 | 1.0 | 2026-06-14 | Claude + Owner | Plan ban đầu khi đóng băng spec |
 | 2.0 | 2026-06-16 | Claude (Opus 4.7) + Deep Research | Viết lại theo best practices: App Check, Transactions, Cloud Functions v2 concurrency, iOS Web Push, PDPL compliance, cost estimate, monitoring, backup plan, testing strategy |
-| **2.1** | **2026-06-17** | **Claude (Opus 4.7)** | **UI/UX overhaul + bug fixes (chi tiết §16)** |
+| 2.1 | 2026-06-17 | Claude (Opus 4.7) | UI/UX overhaul + bug fixes (chi tiết §16) |
+| **2.2** | **2026-06-17** | **Claude (Opus 4.7) + Owner UAT feedback** | **Triển khai 8 chỉnh sửa PRD v2.1 (chi tiết §17)** |
 
 ## 16. Lịch sử bug fix & UI polish (v2.1 — 2026-06-17)
 
@@ -629,6 +633,158 @@ npx tsx seed/setRole.ts +84947010978 OWNER
 - [ ] **Trang `/privacy`** (PDPL yêu cầu trước launch).
 - [ ] **Callable `deleteAccount`** (right to erasure theo PDPL).
 - [ ] **Firestore daily backup** — cần cron Cloud Scheduler trigger `gcloud firestore export`.
+
+---
+
+## 17. v2.2 Implementation — 8 chỉnh sửa từ PRD v2.1
+
+Triển khai 8 hạng mục C1–C8 trong PRD §14. Sắp theo thứ tự thực hiện (ít rủi ro trước → nhiều rủi ro sau).
+
+### 17.1 Tổng quan task list
+
+| # | Task | Files chính | Backend? | Ước tính |
+|---|---|---|---|---|
+| C1 | Logout cho Coach | [src/app/(coach)/coach/layout.tsx](../src/app/(coach)/coach/layout.tsx) | — | 15 phút |
+| C4 | Signin nhận 10 số đầy đủ | [src/app/(public)/signin/page.tsx](../src/app/(public)/signin/page.tsx) + thêm `lib/phone.ts` | — | 30 phút |
+| C5 | Gỡ quyền user | [src/app/(staff)/admin/staff/page.tsx](../src/app/(staff)/admin/staff/page.tsx) + [functions/src/staff.ts](../functions/src/staff.ts) | ✅ thêm `revokeUserRole` | 1h |
+| C3a | Lịch sử đơn theo ngày/tháng/năm | [src/app/(staff)/admin/orders/page.tsx](../src/app/(staff)/admin/orders/page.tsx) | — (đọc Firestore client) | 1.5h |
+| C3b | Xóa cứng đơn có lý do | [functions/src/admin.ts:deleteOrder](../functions/src/admin.ts) + UI confirm | ✅ mở rộng `deleteOrder` | 1h |
+| C6 | Dashboard chéo Loại × Đối tượng | [src/app/(staff)/admin/page.tsx](../src/app/(staff)/admin/page.tsx) + reports | — | 1h |
+| C7 | Báo cáo Owner filter Ngày/Tháng/Năm | [src/app/(staff)/admin/reports/page.tsx](../src/app/(staff)/admin/reports/page.tsx) | — | 2h |
+| C2 | Wizard 4 bước + gộp ca | [src/app/(customer)/services/course/page.tsx](../src/app/(customer)/services/course/page.tsx) + [functions/src/orders.ts:createOrder](../functions/src/orders.ts) | ✅ server tự tính `startDate` | 2.5h |
+| C8 | Khóa học của tôi | mới [src/app/(customer)/my-courses/page.tsx](../src/app/(customer)/my-courses/page.tsx) + `[id]/page.tsx` + nav | — (đọc Firestore client) | 3h |
+
+**Tổng**: ~13h dev + 2h test = 2 ngày làm việc.
+
+### 17.2 Chi tiết kỹ thuật từng task
+
+#### C1 — Logout Coach (rủi ro: thấp)
+- Sửa `src/app/(coach)/coach/layout.tsx` thêm header bar với icon LogOut (lucide). Onclick → `signOut(auth)` → `router.replace("/")`.
+- Tái dùng pattern logout đang có ở `(customer)/profile/page.tsx`.
+
+#### C4 — Phone input 10 chữ số (rủi ro: thấp — pure UI)
+- Tạo `src/lib/phone.ts` exports `normalizeVNPhone(input: string): string` (đã có bản backend trong `functions/src/staff.ts`; nhân bản client). Regex chấp nhận `0xxxxxxxxx` `+84xxxxxxxxx` `84xxxxxxxxx` → trả `+84...`.
+- Sửa `(public)/signin/page.tsx`:
+  - Bỏ chip "+84"; placeholder = "0947 010 978"; `maxLength=10`; `inputMode="numeric"`.
+  - Validation: regex `/^0\d{9}$/`, báo lỗi "Vui lòng nhập đủ 10 số bắt đầu bằng 0".
+  - Trước khi `signInWithPhoneNumber`, gọi `normalizeVNPhone`.
+- Sửa toàn bộ chỗ search SĐT (`admin/customers`, `admin/checkin-assist`, `admin/staff`) — chấp nhận 10 số input, normalize trước khi query Firestore (`where("phone","==",normalized)` — đồng thời migrate dữ liệu cũ nếu lưu khác format).
+- **Lưu ý dữ liệu cũ**: tài liệu hiện đang lưu `phone` ở dạng `+84...` (E.164). Giữ nguyên format lưu; chỉ thay đổi cách hiển thị (`displayPhone(e164)` → `0947 010 978`) + cách nhận input.
+
+#### C5 — Gỡ quyền (rủi ro: trung — touch custom claims)
+- Functions: tạo `revokeUserRole` trong `functions/src/staff.ts`:
+  ```ts
+  export const revokeUserRole = onCall({ region }, async (req) => {
+    requireOwner(req);
+    const { targetUid } = req.data;
+    if (targetUid === req.auth!.uid) throw new HttpsError("failed-precondition", "Không thể gỡ quyền chính mình");
+    // Đếm OWNER còn lại nếu target đang là OWNER
+    const target = await db.doc(`users/${targetUid}`).get();
+    if (target.data()?.role === "OWNER") {
+      const owners = await db.collection("users").where("role","==","OWNER").get();
+      if (owners.size <= 1) throw new HttpsError("failed-precondition", "Phải có ít nhất 1 OWNER khác");
+    }
+    await admin.auth().setCustomUserClaims(targetUid, { role: "CUSTOMER" });
+    await db.doc(`users/${targetUid}`).update({ role: "CUSTOMER" });
+    await db.collection("auditLogs").add({ actorId: req.auth!.uid, action: "REVOKE_ROLE",
+      targetType: "user", targetId: targetUid, detail: { from: target.data()?.role }, at: FV.serverTimestamp() });
+    return { ok: true };
+  });
+  ```
+- Export trong `functions/src/index.ts`.
+- UI `admin/staff/page.tsx`: với mỗi user role ≠ CUSTOMER → button đỏ "Gỡ quyền" + Dialog confirm hiển thị role hiện tại + cảnh báo. Onclick gọi callable.
+- Sau call thành công → toast success + refresh list + nếu user đang đăng nhập là target → force `getIdToken(true)`.
+
+#### C3a — Lịch sử đơn theo ngày/tháng/năm
+- Sửa `admin/orders/page.tsx`: thêm date-range picker (component custom dùng `<input type="date">` + preset buttons "Hôm nay/Hôm qua/7 ngày/Tháng này/Tháng trước/Năm này/Tùy chỉnh").
+- Query Firestore: `where("createdAt", ">=", rangeStart).where("createdAt","<=", rangeEnd).orderBy("createdAt","desc").limit(50)`. Cần composite index `(status, createdAt)` đã có; thêm index `(createdAt desc)` standalone nếu chưa.
+- Group by ngày (label "Hôm nay/Hôm qua/DD/MM/YYYY"). Tổng tiền + đếm đơn ở footer mỗi nhóm.
+
+#### C3b — Xóa cứng đơn có lý do
+- Mở rộng `functions/src/admin.ts:deleteOrder`: 
+  - Cho phép tất cả trạng thái (không chỉ PENDING) **nếu** request có `reason` không rỗng.
+  - Nếu đơn PAID: cập nhật memberships/ticketPackages/enrollments liên quan với `orderDeleted: true` (không thay đổi `status` để khách vẫn dùng được thẻ đã active). Refund logic vẫn riêng — KHÔNG tự refund.
+  - Audit log: `DELETE_ORDER` với `detail: { reason, prevStatus, productType }`.
+- UI orders: nút "Xóa" hiển thị cho Owner ở mọi trạng thái (đỏ, icon trash). Confirm 2 lớp: dialog 1 yêu cầu nhập lý do (textarea), dialog 2 xác nhận lần cuối "Bạn chắc chắn? Hành động này không thể hoàn tác."
+
+#### C6 — Dashboard chéo Loại × Đối tượng
+- Sửa `admin/page.tsx` (dashboard Owner+Receptionist):
+  - Query `/orders` PAID hôm nay (đã có).
+  - Reduce thành matrix `{ [productType]: { [audience]: { count, amountVND } } }`.
+  - Render bảng: hàng = productType (Khóa học / Vé tháng / Gói lượt), cột = audience (Người lớn / Trẻ ≥1.4m / Trẻ <1.4m). Với khóa học, audience = N/A (gộp 1 cột).
+  - Hiển thị `{count} đơn / {formatVND(amount)}` mỗi ô. Tổng cột + tổng hàng.
+
+#### C7 — Báo cáo Owner filter Ngày/Tháng/Năm
+- Sửa `admin/reports/page.tsx`:
+  - Segmented control "Ngày | Tháng | Năm | Tùy chỉnh".
+  - Khi chọn Ngày: date picker; query orders PAID trong ngày.
+  - Khi chọn Tháng: month picker (`type="month"`); query trong tháng + bar chart group by ngày.
+  - Khi chọn Năm: year picker (select); query cả năm + bar chart group by tháng (12 cột).
+  - Khi tùy chỉnh: 2 date pickers from/to.
+  - Tái dùng matrix chéo từ C6.
+- Cần composite index `(status, paidAt desc)` cho query trên paidAt.
+
+#### C2 — Wizard 4 bước + gộp ca (rủi ro: cao — thay đổi UX cốt lõi)
+- Frontend `(customer)/services/course/page.tsx`:
+  - Step state đổi từ 5 → 4. Bỏ state `startDate`.
+  - Step "Chọn ca": query slots của coach, **gộp theo `(startHour, endHour)`**, hiển thị label "07h–08h (T3-T5-T7)" + "Còn N chỗ" (lấy `min(20 - enrolledCount)` qua 3 weekday).
+  - Step "Xác nhận": hiển thị `startDate` server-suggested (tính client-side cho preview: `nextOccurrence(firstWeekday, now)`) + nút "+1 tuần" / "−1 tuần" (clamp ±4 tuần).
+  - Payload gửi `createOrder`: `{ coachId, hourGroup: { startHour, endHour }, weekOffset: 0..4 }` thay vì `slotId, startDate`.
+- Backend `functions/src/orders.ts:createOrder`:
+  - Nhận `hourGroup` + `weekOffset`. Lấy 3 slot doc của coach theo (weekday, startHour) — chọn slot có weekday gần nhất từ now+weekOffset chưa đầy (`enrolledCount < capacity`).
+  - Tính `startDate = nextOccurrence(chosenSlot.weekday, now + weekOffset*7 days)`. Nếu đã quá giờ hôm đó → bump tuần kế.
+  - Transaction tăng `enrolledCount` của slot được chọn (giữ logic INV-3, INV-11).
+- Helper `lib/date.ts`: `nextOccurrence(weekday: 0..6, from: Date): Date`.
+- Migration: enrollment doc vẫn lưu `slotId` cụ thể như trước → các trang HLV/khóa của tôi không cần đổi.
+
+#### C8 — Khóa học của tôi (rủi ro: trung — màn mới, nhiều query)
+- Tạo route `(customer)/my-courses/page.tsx` (list) + `(customer)/my-courses/[id]/page.tsx` (detail).
+- **List query**: 2 query parallel: 
+  ```ts
+  where("studentId","==",uid)                     // bản thân
+  where("parentId","==",uid)                      // các con
+  ```
+  Gộp + sort theo status (ACTIVE first, `expiryDate` asc).
+- **Detail query**: 
+  - 1 read `/enrollments/{id}` (đã có data từ list, có thể truyền qua nav state).
+  - 1 read `/coaches/{coachId}` để lấy SĐT cho Zalo deeplink.
+  - 1 listen `/enrollments/{id}/attendances` order by `date desc` limit 15.
+  - 1 listen `/users/{uid}/notifications` where `type in ["COURSE_REMAINING","COURSE_EXPIRED","EXPIRY_WARNING"]` limit 5.
+- Components mới:
+  - `<CourseProgressCard>`: progress bar + days-remaining countdown.
+  - `<AttendanceList>`: rows với date + source chip.
+- Update `BottomNav.tsx` hoặc Home shortcut grid: thêm icon "Khóa học của tôi" (BookOpen lucide).
+- Firestore index cần: `enrollments (parentId, status, expiryDate)` + `enrollments (studentId, status, expiryDate)`. Thêm vào `firestore/firestore.indexes.json`.
+
+### 17.3 Thứ tự deploy đề xuất
+
+1. **PR #1 — Quick wins (UI only)**: C1 + C4 + C6 — không đụng backend, deploy ngay, test trên dev.
+2. **PR #2 — Order ops**: C3a + C3b — cần index mới, deploy index trước, sau đó functions + UI.
+3. **PR #3 — Owner power tools**: C5 + C7 — cần functions mới, deploy functions trước.
+4. **PR #4 — Course UX overhaul**: C2 — UX cốt lõi, làm cuối + UAT kỹ.
+5. **PR #5 — New feature**: C8 — feature mới, có thể flag-toggle ẩn link nav cho đến khi UAT xong.
+
+### 17.4 Testing checklist v2.2
+
+- [ ] C1: HLV đăng nhập → bấm logout → về landing → không vào lại `/coach` được.
+- [ ] C4: nhập "0947010978" → OTP gửi đến `+84947010978`. Nhập sai format (9 số / có chữ) → báo lỗi VN.
+- [ ] C5: Owner gỡ quyền 1 RECEPTIONIST → user đó refresh không vào được `/admin`. Thử gỡ Owner cuối cùng → bị chặn.
+- [ ] C3a: chọn "Tháng trước" → list đúng đơn tháng trước, tổng tiền đúng. Chọn ngày 15/06/2026 cụ thể → đếm khớp.
+- [ ] C3b: xóa đơn PAID → đơn biến mất khỏi list; thẻ tương ứng vẫn dùng được; auditLog có entry.
+- [ ] C6: dashboard hiển thị "3 khóa = 5.4M" sau khi PAID 3 đơn khóa học hôm nay.
+- [ ] C7: filter "Năm 2026" → bar chart 12 cột tháng, tổng = tổng các tháng.
+- [ ] C2: đăng ký khóa Thầy Tín 14h-15h → server tự chọn ngày T3/T5/T7 gần nhất; thử +1 tuần → đẩy đúng 7 ngày.
+- [ ] C8: phụ huynh có 2 con đều học khóa → list hiện 2 thẻ; tap chi tiết hiện đúng attendances; bấm Zalo HLV → mở app Zalo.
+- [ ] Regression: check-in QR vẫn hoạt động sau khi đổi createOrder; rules vẫn deny lễ tân vào `/admin/reports`.
+
+### 17.5 Rủi ro & rollback
+
+| Task | Rủi ro | Rollback |
+|---|---|---|
+| C2 | createOrder thay đổi contract → đơn cũ trong DB không lệch (vẫn giữ slotId), nhưng client cũ cache có thể gửi payload cũ → server cần BC nhận cả 2 format trong 1 tuần. | Functions revert + redeploy version trước; UI version cũ trên Vercel rollback qua Vercel UI. |
+| C5 | Gỡ nhầm quyền Owner duy nhất → khóa hệ thống. | Bảo vệ "≥1 OWNER" + có script `seed/setRole.ts +84... OWNER` để khôi phục bằng service account. |
+| C3b | Xóa đơn PAID làm khó kế toán đối soát. | Audit log giữ đủ thông tin để revert thủ công; orderDeleted flag thay vì xóa data cứng cũng OK. |
+| C4 | Khách cũ đã quen UI "+84" có thể bối rối → thêm hint nhỏ "Nhập đủ 10 số (bắt đầu bằng 0)". | UI-only, revert nhanh. |
 
 ---
 

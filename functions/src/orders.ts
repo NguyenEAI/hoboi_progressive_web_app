@@ -77,8 +77,13 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
     snapshot.packageSize = size;
   } else if (productType === "SWIM_COURSE") {
     const style = d.swimStyle as SwimStyle;
-    if (!d.coachId || !d.slotId || !d.startDate)
-      throw new HttpsError("invalid-argument", "Thiếu HLV/khung giờ/ngày bắt đầu");
+    // v2.1: chấp nhận 2 dạng payload
+    //   (cũ) { coachId, slotId, startDate }
+    //   (mới) { coachId, startHour, weekOffset? } — server tự chọn slot+startDate
+    const hasNew = !!d.coachId && typeof d.startHour === "number";
+    const hasLegacy = !!d.coachId && !!d.slotId && !!d.startDate;
+    if (!hasNew && !hasLegacy)
+      throw new HttpsError("invalid-argument", "Thiếu HLV/khung giờ");
     amountVND = prices.course;
     snapshot.name = styleLabel(style);
     snapshot.swimStyle = style;
@@ -100,6 +105,35 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
 
   // Khóa học: giữ chỗ slot trong transaction
   if (productType === "SWIM_COURSE") {
+    // Path mới: tự chọn slot weekday gần nhất theo (coachId, startHour, weekOffset)
+    if (typeof d.startHour === "number" && !d.slotId) {
+      const coachSnap = await db().doc(`coaches/${d.coachId}`).get();
+      if (!coachSnap.exists) throw new HttpsError("not-found", "HLV không tồn tại");
+      const weekdays = (coachSnap.data()!.weekdays ?? []) as number[];
+      if (!weekdays.length) throw new HttpsError("failed-precondition", "HLV chưa có lịch dạy");
+      const weekOffset = Math.min(4, Math.max(0, Number(d.weekOffset ?? 0)));
+      const { startDate, weekday } = pickNextSlot(weekdays, Number(d.startHour), weekOffset);
+      const slotId = `${d.coachId}_${weekday}_${Number(d.startHour)}`;
+      const slotRef = db().doc(`coaches/${d.coachId}/slots/${slotId}`);
+      return await db().runTransaction(async (tx) => {
+        const slot = await tx.get(slotRef);
+        if (!slot.exists) throw new HttpsError("not-found", "Khung giờ không tồn tại");
+        const s = slot.data()!;
+        if ((s.enrolledCount ?? 0) >= (s.capacity ?? SLOT_CAPACITY))
+          throw new HttpsError("resource-exhausted", "Khung giờ đã đầy 20/20");
+        tx.update(slotRef, { enrolledCount: (s.enrolledCount ?? 0) + 1 });
+
+        const orderRef = db().collection("orders").doc();
+        tx.set(orderRef, {
+          ...baseOrder, id: orderRef.id,
+          coachId: d.coachId, slotId,
+          startDate: admin.firestore.Timestamp.fromDate(startDate),
+        });
+        return { orderId: orderRef.id, amountVND };
+      });
+    }
+
+    // Path cũ (giữ tương thích ngược 1 tuần)
     const slotRef = db().doc(`coaches/${d.coachId}/slots/${d.slotId}`);
     return await db().runTransaction(async (tx) => {
       const slot = await tx.get(slotRef);
@@ -293,6 +327,33 @@ async function releaseSlot(tx: FirebaseFirestore.Transaction, coachId: string, s
   const slot = await tx.get(slotRef);
   if (slot.exists)
     tx.update(slotRef, { enrolledCount: Math.max(0, (slot.data()!.enrolledCount ?? 1) - 1) });
+}
+
+// Chọn weekday gần nhất trong danh sách `weekdays` (0=CN..6=T7),
+// tính từ now + weekOffset*7 ngày. Nếu hôm đó trùng weekday nhưng đã quá giờ
+// startHour thì lùi sang tuần kế.
+function pickNextSlot(weekdays: number[], startHour: number, weekOffset: number):
+{ startDate: Date; weekday: number } {
+  const base = new Date();
+  base.setDate(base.getDate() + weekOffset * 7);
+  base.setHours(0, 0, 0, 0);
+  let chosen: Date | null = null;
+  let chosenWd = -1;
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i);
+    const wd = d.getDay();
+    if (!weekdays.includes(wd)) continue;
+    // nếu là hôm nay và đã quá giờ học → bỏ
+    const isSameDay = i === 0 && weekOffset === 0;
+    if (isSameDay && new Date().getHours() >= startHour) continue;
+    chosen = d;
+    chosenWd = wd;
+    break;
+  }
+  if (!chosen) throw new HttpsError("failed-precondition", "Không tìm được ngày dạy phù hợp");
+  chosen.setHours(startHour, 0, 0, 0);
+  return { startDate: chosen, weekday: chosenWd };
 }
 
 async function suspendServiceByOrder(orderId: string) {
