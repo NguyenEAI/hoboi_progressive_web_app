@@ -31,19 +31,28 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 function ToastItem({ t, onClose }: { t: Toast; onClose: () => void }) {
   const [exit, setExit] = useState(false);
   useEffect(() => { const tm = setTimeout(() => setExit(true), 3200); return () => clearTimeout(tm); }, []);
+  
   const styles =
-    t.kind === "success" ? "bg-brand-700 text-white"
-    : t.kind === "error" ? "bg-red-600 text-white"
-    : "bg-slate-900 text-white";
+    t.kind === "success"
+      ? "bg-emerald-600/95 border-emerald-500/30 text-white shadow-[0_12px_24px_-4px_rgba(5,150,105,0.3)]"
+      : t.kind === "error"
+      ? "bg-rose-600/95 border-rose-500/30 text-white shadow-[0_12px_24px_-4px_rgba(225,29,72,0.3)]"
+      : "bg-slate-900/95 border-slate-700/30 text-white shadow-soft";
+      
   const icon = t.kind === "success" ? "✓" : t.kind === "error" ? "✕" : "ⓘ";
+  
   return (
     <div
-      className={`pointer-events-auto flex items-start gap-2.5 rounded-xl px-3.5 py-3 shadow-elevated ${styles} ${exit ? "animate-fade-in opacity-0" : "animate-fade-up"}`}
-      style={{ transition: "opacity 240ms ease" }}
+      className={`pointer-events-auto flex items-center gap-3 rounded-2xl border px-4 py-3.5 backdrop-blur-md transition-all active:scale-[0.98] cursor-pointer ${styles} ${
+        exit ? "opacity-0 translate-y-[-8px] scale-95" : "animate-fade-down"
+      }`}
+      style={{ transition: "all 300ms cubic-bezier(0.16, 1, 0.3, 1)" }}
       onClick={onClose}
     >
-      <span className="mt-0.5 text-base leading-none">{icon}</span>
-      <span className="flex-1 text-sm leading-snug">{t.text}</span>
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-black shadow-inner">
+        {icon}
+      </span>
+      <span className="flex-1 text-[13px] font-semibold leading-snug">{t.text}</span>
     </div>
   );
 }

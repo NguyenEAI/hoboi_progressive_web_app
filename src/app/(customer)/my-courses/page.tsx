@@ -8,6 +8,7 @@ import { SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
 import { toDate, daysUntil, formatDate } from "@/lib/utils";
 import type { Enrollment, CoachSlot } from "@/types";
 import { BookOpen, ChevronRight, Sparkles } from "lucide-react";
+import { BackButton } from "@/components/BackButton";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "bg-emerald-100 text-emerald-700",
@@ -62,11 +63,14 @@ export default function MyCoursesPage() {
 
   return (
     <main className="mx-auto max-w-md pb-24">
-      <header className="border-b bg-white px-5 py-4">
-        <h1 className="text-xl font-bold text-brand-800 flex items-center gap-2">
-          <BookOpen className="size-5" /> Khóa học của tôi
-        </h1>
-        <p className="text-xs text-slate-500">Theo dõi tiến độ, ngày hết hạn và lịch sử buổi học</p>
+      <header className="border-b bg-white px-3 py-3">
+        <div className="flex items-center gap-1">
+          <BackButton fallback="/home" />
+          <h1 className="text-xl font-bold text-brand-800 flex items-center gap-2">
+            <BookOpen className="size-5" /> Khóa học của tôi
+          </h1>
+        </div>
+        <p className="ml-12 -mt-1 text-xs text-slate-500">Theo dõi tiến độ, ngày hết hạn và lịch sử buổi học</p>
         <div className="mt-3 flex gap-2">
           {(["ACTIVE", "ALL"] as const).map((k) => (
             <button key={k} onClick={() => setTab(k)}

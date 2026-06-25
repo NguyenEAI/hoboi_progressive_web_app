@@ -116,22 +116,16 @@ export default function OrdersPage() {
     try { await refundOrder({ orderId: id, reason }); } catch (e) { alert((e as Error).message); } finally { setBusy(undefined); }
   }
   async function del(o: Order) {
-    let reason: string | undefined;
-    if (o.status === "PENDING_PAYMENT") {
-      if (!confirm("Xóa đơn chưa thanh toán này?")) return;
-    } else {
-      reason = prompt(
-        `Bạn đang XÓA CỨNG đơn ${o.status}. Hành động này không hoàn tác.\n` +
-        `Thẻ/payment đã sinh sẽ được gắn cờ "orderDeleted" để loại khỏi báo cáo mới.\n\n` +
-        `Lý do (bắt buộc):`,
-      )?.trim();
-      if (!reason) return;
-      if (!confirm(`Xác nhận xóa cứng đơn ${o.id.slice(0, 6)}? Không thể hoàn tác.`)) return;
-    }
+    // v2.3 (D1): Owner xóa 1-click — không dialog, không yêu cầu lý do.
+    // Snapshot order lưu vào /auditLogs để recovery thủ công nếu cần.
     setBusy(o.id);
-    try { await deleteOrder({ orderId: o.id, reason }); }
-    catch (e) { alert((e as Error).message); }
-    finally { setBusy(undefined); }
+    try {
+      await deleteOrder({ orderId: o.id });
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(undefined);
+    }
   }
 
   return (

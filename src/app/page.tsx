@@ -74,14 +74,14 @@ export default function LandingPage() {
         </div>
 
         {/* Wave footer */}
-        <div className="pointer-events-none absolute inset-x-0 -bottom-px text-slate-50">
+        <div className="pointer-events-none absolute inset-x-0 -bottom-px text-[#f8fafc]">
           <WavePattern className="h-12 w-full" />
         </div>
       </header>
 
       {/* ========== STATS ========== */}
       <section className="-mt-8 px-4">
-        <div className="card-premium flex items-stretch justify-around divide-x divide-brand-100 px-2 py-3 text-center text-xs">
+        <div className="card-glass flex items-stretch justify-around divide-x divide-slate-100/80 px-2 py-4 text-center text-xs shadow-float border border-white/60">
           <Stat label="Khách / năm" value="2.000+" />
           <Stat label="Sức chứa" value="20 / ca" />
           <Stat label="Khóa học" value="15 buổi" />
@@ -89,26 +89,26 @@ export default function LandingPage() {
       </section>
 
       {/* ========== SERVICES ========== */}
-      <section className="mt-6 px-4">
+      <section className="mt-7 px-4">
         <SectionTitle title="Dịch vụ trực tuyến" hint="Đăng ký nhanh, thanh toán tại quầy" />
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-3.5 grid grid-cols-2 gap-3">
           {services.map((s, i) => (
             <div
               key={s.name}
-              className="card-premium relative animate-fade-up overflow-hidden p-4"
+              className="card-interactive relative overflow-hidden p-5 transition-all duration-300 hover:shadow-float"
               style={{ animationDelay: `${i * 70}ms` }}
             >
               <div
-                className={`absolute -right-6 -top-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br ${s.grad} text-2xl opacity-90 shadow-lg`}
+                className={`absolute -right-5 -top-5 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br ${s.grad} text-xl opacity-90 shadow-md`}
               >
                 {s.icon}
               </div>
-              <div className="relative mt-10">
-                <div className="text-xs text-slate-500">{s.name}</div>
-                <div className="text-lg font-bold text-brand-800 tab-nums">
+              <div className="relative mt-7">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.name}</div>
+                <div className="mt-1 text-lg font-extrabold text-brand-700 tab-nums leading-none">
                   {s.flat ? formatVND(s.from) : `từ ${formatVND(s.from)}`}
                 </div>
-                <div className="mt-0.5 text-[11px] text-slate-500">{s.desc}</div>
+                <div className="mt-2 text-[11px] font-medium text-slate-500">{s.desc}</div>
               </div>
             </div>
           ))}
@@ -116,23 +116,23 @@ export default function LandingPage() {
       </section>
 
       {/* ========== SINGLE TICKETS ========== */}
-      <section className="mt-7 px-4">
+      <section className="mt-8 px-4">
         <SectionTitle
           title="Bảng giá vé lẻ"
           hint="Mua trực tiếp tại quầy lễ tân"
         />
-        <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-slate-100">
+        <ul className="mt-3.5 divide-y divide-slate-100/70 overflow-hidden rounded-2xl bg-white shadow-soft ring-1 ring-slate-100">
           {singleTickets.map((p, i) => (
             <li
               key={p.label}
-              className="flex items-center gap-3 p-4 animate-fade-in"
+              className="flex items-center gap-3.5 p-4 transition-colors hover:bg-slate-50/50"
               style={{ animationDelay: `${100 + i * 40}ms` }}
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-xl">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-xl shadow-sm">
                 {p.emoji}
               </span>
-              <span className="flex-1 text-sm font-medium text-slate-700">{p.label}</span>
-              <span className="font-bold text-brand-700 tab-nums">{formatVND(p.value)}</span>
+              <span className="flex-1 text-sm font-semibold text-slate-700">{p.label}</span>
+              <span className="font-extrabold text-brand-600 tab-nums text-[15px]">{formatVND(p.value)}</span>
             </li>
           ))}
         </ul>
@@ -140,22 +140,22 @@ export default function LandingPage() {
 
       {/* ========== CTA ========== */}
       <section className="mt-8 px-4 animate-fade-up">
-        <div className="card-glass relative overflow-hidden p-5">
+        <div className="card-glass relative overflow-hidden p-6 border border-brand-100 bg-white/80 shadow-float">
           <div className="text-balance">
-            <div className="text-base font-bold text-brand-800">
+            <div className="text-lg font-extrabold text-brand-800 tracking-tight">
               Sẵn sàng bơi cùng chúng tôi?
             </div>
-            <div className="mt-1 text-xs text-slate-600">
-              Đăng nhập bằng số điện thoại, không cần mật khẩu.
+            <div className="mt-1 text-xs font-medium text-slate-500">
+              Đăng nhập an toàn bằng số điện thoại, không cần mật khẩu.
             </div>
           </div>
-          <div className="mt-4 flex gap-3">
-            <Link href="/signin" className="btn-primary flex-1 py-3.5">
+          <div className="mt-5 flex gap-3">
+            <Link href="/signin" className="btn-primary flex-1 py-4 text-sm font-bold tracking-wide">
               Bắt đầu ngay
-              <ArrowRight className="size-4" />
+              <ArrowRight className="size-4" strokeWidth={2.5} />
             </Link>
           </div>
-          <p className="mt-3 flex items-center justify-center gap-1.5 text-[10.5px] text-slate-500">
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-[10.5px] font-medium text-slate-400">
             <ShieldCheck className="size-3.5 text-brand-500" />
             Bảo mật bằng mã OTP SMS · Tuân thủ PDPL VN 2026
           </p>

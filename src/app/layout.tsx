@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ToastProvider } from "@/components/Toast";
+import { NotificationListener } from "@/components/NotificationListener";
 import "./globals.css";
 
 const inter = Inter({
@@ -29,7 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="vi" className={inter.variable} suppressHydrationWarning>
       <body suppressHydrationWarning className="min-h-screen font-sans text-slate-900 antialiased">
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <NotificationListener />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

@@ -28,6 +28,8 @@ export default {
         card: "0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.05)",
         elevated: "0 4px 12px rgba(15,23,42,0.06), 0 12px 32px rgba(15,23,42,0.08)",
         glow: "0 0 0 4px rgba(34,197,94,0.15)",
+        soft: "0 10px 30px -10px rgba(15, 23, 42, 0.08)",
+        float: "0 20px 40px -15px rgba(15, 23, 42, 0.12)",
       },
       borderRadius: { "2.5xl": "1.25rem" },
       keyframes: {

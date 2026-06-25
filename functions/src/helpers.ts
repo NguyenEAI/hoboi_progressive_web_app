@@ -51,3 +51,27 @@ export async function audit(
     at: admin.firestore.Timestamp.now(),
   });
 }
+
+// Chuẩn hóa SĐT Việt Nam về E.164 (+84...).
+// Chấp nhận: "+84905...", "0905...", "905...", "84 905 ...", có dấu cách/gạch.
+// Trả null nếu format sai.
+export function normalizeVNPhone(input: string): string | null {
+  if (!input) return null;
+  const raw = input.trim().replace(/[\s.-]/g, "");
+  let digits = raw.startsWith("+") ? raw.slice(1) : raw;
+  digits = digits.replace(/\D/g, "");
+  if (digits.startsWith("0")) digits = "84" + digits.slice(1);
+  if (!digits.startsWith("84")) digits = "84" + digits;
+  // SĐT VN sau mã quốc gia: 9 chữ số → total 11
+  if (digits.length !== 11) return null;
+  return "+" + digits;
+}
+
+// Trả về 3 format có thể của 1 SĐT VN (raw input, local 0..., E.164 +84...)
+// Dùng cho query `where("phone", "in", [...])` để bắt cả 3 format dữ liệu cũ.
+export function phoneVariants(input: string): { e164: string; local: string; raw: string } | null {
+  const raw = input.trim();
+  const e164 = normalizeVNPhone(raw);
+  if (!e164) return null;
+  return { e164, local: "0" + e164.slice(3), raw };
+}

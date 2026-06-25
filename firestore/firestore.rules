@@ -11,7 +11,17 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isStaff() || isCoach() || self(uid);
       allow create: if self(uid);
-      allow update: if self(uid) || isOwner();
+      // v2.5: khách hàng KHÔNG được tự đổi fullName sau khi đã set (chỉ owner/lễ tân đổi qua callable).
+      // Cho phép self update nếu: fullName không đổi, HOẶC fullName cũ rỗng (lần đầu setup ở /signin).
+      // Owner update tùy ý qua admin SDK (callable bypass rules).
+      allow update: if isOwner()
+        || (self(uid) && (
+          !('fullName' in request.resource.data)
+          || resource.data.fullName == null
+          || resource.data.fullName == ''
+          || request.resource.data.fullName == resource.data.fullName
+        ));
+      // delete chỉ qua callable deleteCustomer (admin SDK)
       allow delete: if false;
 
       match /children/{cid} {
@@ -28,6 +38,8 @@ service cloud.firestore {
     match /pricingRules/{id}  { allow read: if true;          allow write: if isOwner(); }
     match /coaches/{cid}      { allow read: if isSignedIn();  allow write: if isOwner();
       match /slots/{sid}      { allow read: if isSignedIn();  allow write: if isOwner(); }
+      // v2.4 (E4 / INV-18) — HLV báo nghỉ ca: HV/lễ tân/Owner đọc được; ghi qua callable
+      match /absences/{aid}   { allow read: if isSignedIn();  allow write: if false; }
     }
 
     match /orders/{oid}       {
@@ -51,6 +63,11 @@ service cloud.firestore {
       }
     }
     match /checkins/{id}      { allow read: if isStaff() || resource.data.userId == request.auth.uid; allow write: if false; }
+    // v2.3 (D5/INV-15): vé lượt — khách quét QR tạo request, lễ tân duyệt
+    match /checkinRequests/{id} {
+      allow read: if isStaff() || resource.data.userId == request.auth.uid;
+      allow write: if false; // chỉ qua callable (requestCheckin/approveCheckin/rejectCheckin/cancelCheckinRequest)
+    }
     match /qrTokens/{id}      { allow read: if false; allow write: if false; }
     match /counters/{id}      { allow read: if false; allow write: if false; }
     match /auditLogs/{id}     { allow read: if isOwner(); allow write: if false; }

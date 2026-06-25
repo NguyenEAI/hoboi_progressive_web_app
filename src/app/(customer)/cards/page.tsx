@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { Membership, TicketPackage } from "@/types";
+import Link from "next/link";
 import { MembershipCard, PackageCard } from "@/components/MemberCard";
 import { SkeletonList } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
@@ -60,13 +61,15 @@ export default function CardsPage() {
         ))}
 
         {loaded && pkgs.map((p, i) => (
-          <div
+          <Link
             key={p.id}
-            className="animate-fade-up"
+            href={`/cards/package/${p.id}`}
+            className="block animate-fade-up transition active:scale-[0.98]"
             style={{ animationDelay: `${(mems.length + i) * 80}ms` }}
           >
             <PackageCard p={p} holderName={profile.fullName} />
-          </div>
+            <p className="mt-1 text-center text-[11px] text-slate-500">Tap để xem lịch sử check-in →</p>
+          </Link>
         ))}
 
         {loaded && empty && (

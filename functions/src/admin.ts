@@ -115,12 +115,12 @@ function slugify(s: string): string {
     .replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 }
 
-// ============== DELETE ORDER ==============
-// Quy tắc:
-// - PENDING_PAYMENT: cho phép xóa không cần lý do (khách chọn nhầm). Trả slot nếu là khóa học.
-// - PAID / CANCELLED / REFUNDED: bắt buộc nhập lý do. Xóa cứng doc order nhưng giữ thẻ/payment
-//   liên quan, chỉ gắn cờ `orderDeleted: true` để tách bạch khỏi báo cáo doanh thu mới.
-//   Hoàn tiền vẫn dùng `refundOrder` riêng (delete KHÔNG tự refund).
+// ============== DELETE ORDER (v2.3) ==============
+// v2.3 — Xóa 1-click, không cần lý do (Owner UX feedback 2026-06-22):
+// - Mọi trạng thái (PENDING_PAYMENT / PAID / CANCELLED / REFUNDED) đều xóa được.
+// - Doc /orders/{id} bị xóa cứng. Snapshot order được giữ trong /auditLogs để recovery thủ công.
+// - Thẻ/payment đã sinh: gắn cờ `orderDeleted:true` để loại khỏi báo cáo, không xóa data (khách vẫn dùng được).
+// - Trả slot nếu PENDING khóa học. KHÔNG tự refund — Owner dùng refundOrder riêng nếu cần.
 export const deleteOrder = onCall({ region: REGION }, async (req) => {
   requireOwner(req);
   const { orderId, reason } = req.data as { orderId: string; reason?: string };
@@ -128,6 +128,7 @@ export const deleteOrder = onCall({ region: REGION }, async (req) => {
 
   let prevStatus = "";
   let productType = "";
+  let orderSnapshot: Record<string, unknown> = {};
 
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(orderRef);
@@ -135,10 +136,21 @@ export const deleteOrder = onCall({ region: REGION }, async (req) => {
     const o = snap.data()!;
     prevStatus = o.status;
     productType = o.productType;
-
-    if (o.status !== "PENDING_PAYMENT" && (!reason || !String(reason).trim()))
-      throw new HttpsError("invalid-argument",
-        "Xóa đơn đã thanh toán/hủy/hoàn cần bắt buộc nhập lý do.");
+    // Snapshot order để lưu vào auditLog (recovery khi cần)
+    orderSnapshot = {
+      customerId: o.customerId ?? null,
+      beneficiaryKind: o.beneficiaryKind ?? null,
+      beneficiaryId: o.beneficiaryId ?? null,
+      beneficiaryName: o.beneficiaryName ?? null,
+      productType: o.productType ?? null,
+      productSnapshot: o.productSnapshot ?? null,
+      amountVND: o.amountVND ?? 0,
+      coachId: o.coachId ?? null,
+      slotId: o.slotId ?? null,
+      startDate: o.startDate ?? null,
+      createdAt: o.createdAt ?? null,
+      paidAt: o.paidAt ?? null,
+    };
 
     if (o.status === "PENDING_PAYMENT" && o.productType === "SWIM_COURSE" && o.coachId && o.slotId) {
       const slotRef = db().doc(`coaches/${o.coachId}/slots/${o.slotId}`);
@@ -149,7 +161,7 @@ export const deleteOrder = onCall({ region: REGION }, async (req) => {
     tx.delete(orderRef);
   });
 
-  // Đối với đơn đã PAID/CANCELLED/REFUNDED: gắn cờ vào thẻ/payment liên quan (ngoài transaction)
+  // Gắn cờ vào thẻ/payment liên quan (ngoài transaction)
   if (prevStatus !== "PENDING_PAYMENT") {
     for (const col of ["memberships", "ticketPackages", "enrollments", "payments"] as const) {
       const q = await db().collection(col).where("orderId", "==", orderId).get();
@@ -160,9 +172,17 @@ export const deleteOrder = onCall({ region: REGION }, async (req) => {
   }
 
   await db().collection("auditLogs").add({
-    actorId: req.auth!.uid, action: "DELETE_ORDER",
-    targetType: "order", targetId: orderId,
-    detail: { reason: reason ?? null, prevStatus, productType },
+    actorId: req.auth!.uid,
+    action: "DELETE_ORDER",
+    targetType: "order",
+    targetId: orderId,
+    detail: {
+      reason: reason ?? null,
+      prevStatus,
+      productType,
+      // Snapshot đủ thông tin để dựng lại order thủ công nếu cần
+      orderSnapshot,
+    },
     at: admin.firestore.Timestamp.now(),
   });
   return { ok: true };

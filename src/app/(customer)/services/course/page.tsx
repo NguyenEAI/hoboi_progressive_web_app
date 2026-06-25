@@ -8,11 +8,18 @@ import { createOrder } from "@/lib/callable";
 import { SWIM_STYLES, SLOT_CAPACITY, WEEKDAY_LABELS } from "@/lib/constants";
 import { usePricing } from "@/lib/hooks/usePricing";
 import { formatVND } from "@/lib/utils";
+import { BackButton } from "@/components/BackButton";
 import type { Coach, CoachSlot, SwimStyle, Child } from "@/types";
 
 type HourGroup = { startHour: number; endHour: number; remainingMin: number; weekdays: number[] };
 
-function nextOccurrence(weekdays: number[], startHour: number, weekOffset: number): Date {
+// Tìm ngày dạy gần nhất + weekday tương ứng.
+// Trả thêm `weekday` để client có thể derive slotId chính xác (gửi cả schema legacy).
+function nextOccurrence(
+  weekdays: number[],
+  startHour: number,
+  weekOffset: number,
+): { date: Date; weekday: number } {
   const base = new Date();
   base.setDate(base.getDate() + weekOffset * 7);
   base.setHours(0, 0, 0, 0);
@@ -23,9 +30,9 @@ function nextOccurrence(weekdays: number[], startHour: number, weekOffset: numbe
     if (!weekdays.includes(wd)) continue;
     if (i === 0 && weekOffset === 0 && new Date().getHours() >= startHour) continue;
     d.setHours(startHour, 0, 0, 0);
-    return d;
+    return { date: d, weekday: wd };
   }
-  return new Date(NaN);
+  return { date: new Date(NaN), weekday: -1 };
 }
 
 export default function CourseWizard() {
@@ -78,18 +85,44 @@ export default function CourseWizard() {
     return [...m.values()].sort((a, b) => a.startHour - b.startHour);
   }, [slots]);
 
-  const suggestedDate = useMemo(() =>
-    hour && coach ? nextOccurrence(coach.weekdays, hour.startHour, weekOffset) : null,
-    [hour, coach, weekOffset]);
+  const suggested = useMemo(
+    () => (hour && coach ? nextOccurrence(coach.weekdays, hour.startHour, weekOffset) : null),
+    [hour, coach, weekOffset],
+  );
+  const suggestedDate = suggested?.date ?? null;
 
   async function submit() {
-    if (!profile || !style || !coachId || !hour) return;
+    if (!profile) {
+      setMsg("Lỗi: chưa đăng nhập. Vui lòng đăng nhập lại.");
+      return;
+    }
+    // Validate từng field cụ thể để hiển thị lỗi rõ ràng (v2.3 fix D4)
+    if (!style) { setMsg("Vui lòng quay lại bước 1 chọn kiểu bơi."); setStep(1); return; }
+    if (!coachId) { setMsg("Vui lòng quay lại bước 2 chọn HLV."); setStep(2); return; }
+    if (!hour) { setMsg("Vui lòng quay lại bước 3 chọn khung giờ."); setStep(3); return; }
+    if (!suggested || !suggested.date || isNaN(suggested.date.getTime()) || suggested.weekday < 0) {
+      setMsg("Không tìm được ngày học phù hợp. Vui lòng thử +1 tuần."); return;
+    }
+
     setBusy(true); setMsg(undefined);
     const child = children.find((c) => c.id === studentId);
+
+    // Gửi cả 2 schema (v2.1 mới + legacy) để tương thích với mọi version backend đã deploy.
+    // Backend mới ưu tiên path mới; backend cũ vẫn nhận slotId + startDate.
+    const slotId = `${coachId}_${suggested.weekday}_${hour.startHour}`;
+    const startDateIso = suggested.date.toISOString();
+
     try {
       const { orderId } = await createOrder({
-        productType: "SWIM_COURSE", swimStyle: style, coachId,
-        startHour: hour.startHour, weekOffset,
+        productType: "SWIM_COURSE",
+        swimStyle: style,
+        coachId,
+        // Path mới
+        startHour: hour.startHour,
+        weekOffset,
+        // Path legacy (BC) — để backend cũ vẫn pass validation
+        slotId,
+        startDate: startDateIso,
         beneficiaryKind: child ? "CHILD" : "USER",
         beneficiaryId: child ? child.id : profile.id,
         beneficiaryName: child ? child.fullName : profile.fullName,
@@ -97,16 +130,32 @@ export default function CourseWizard() {
       setOrderId(orderId);
       setMsg(`Đã tạo đơn (mã ${orderId.slice(0, 6)}). Vui lòng thanh toán tại quầy để kích hoạt khóa học.`);
       setStep(5);
-    } catch (e) { setMsg("Lỗi: " + (e as Error).message); } finally { setBusy(false); }
+    } catch (e) {
+      setMsg("Lỗi: " + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const stepLabels = ["Chọn kiểu bơi", "Chọn HLV", "Chọn khung giờ", "Xác nhận"];
 
   return (
     <main className="mx-auto max-w-md pb-28">
-      <header className="border-b bg-white p-4">
-        <button onClick={() => (step > 1 && step < 5 ? setStep(step - 1) : router.back())}
-          className="text-sm text-brand-700">← Đăng ký khóa học</button>
+      <header className="border-b bg-white p-3">
+        <div className="flex items-center gap-1">
+          {step > 1 && step < 5 ? (
+            <button
+              onClick={() => setStep(step - 1)}
+              aria-label="Bước trước"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-black/5"
+            >
+              ←
+            </button>
+          ) : (
+            <BackButton fallback="/services" />
+          )}
+          <span className="text-sm font-semibold text-brand-700">Đăng ký khóa học</span>
+        </div>
         {step < 5 && (
           <>
             <div className="mt-3 flex gap-1">

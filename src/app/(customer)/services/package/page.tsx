@@ -1,0 +1,292 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
+import { useAuthUser } from "@/lib/hooks/useAuthUser";
+import { usePricing } from "@/lib/hooks/usePricing";
+import { createOrder } from "@/lib/callable";
+import { formatVND } from "@/lib/utils";
+import { AUDIENCES, PACKAGE_SIZES } from "@/lib/constants";
+import { useToast } from "@/components/Toast";
+import { BackButton } from "@/components/BackButton";
+import type { Audience, PackageSize, Child } from "@/types";
+import { Plus, Check, Ticket } from "lucide-react";
+
+type Step = "size" | "audience" | "beneficiary" | "confirm";
+
+export default function PackageWizardPage() {
+  const router = useRouter();
+  const { profile } = useAuthUser();
+  const { pricing } = usePricing();
+  const toast = useToast();
+
+  const [step, setStep] = useState<Step>("size");
+  const [size, setSize] = useState<PackageSize | null>(null);
+  const [audience, setAudience] = useState<Audience | null>(null);
+  const [beneficiary, setBeneficiary] = useState<string | null>(null);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!profile) return;
+    getDocs(collection(db, `users/${profile.id}/children`)).then((s) =>
+      setChildren(s.docs.map((d) => ({ id: d.id, ...d.data() } as Child))),
+    );
+  }, [profile]);
+
+  const price = useMemo(
+    () => (size && audience ? pricing.package[audience][size] : 0),
+    [size, audience, pricing],
+  );
+
+  const isChild = beneficiary && beneficiary !== "self";
+  const child = children.find((c) => c.id === beneficiary);
+  const beneficiaryName = isChild ? child?.fullName ?? "" : profile?.fullName ?? "";
+
+  async function confirm() {
+    if (!profile || !size || !audience || !beneficiary) return;
+    setBusy(true);
+    try {
+      const { orderId, amountVND } = await createOrder({
+        productType: "PACKAGE",
+        packageSize: size,
+        audience,
+        beneficiaryKind: isChild ? "CHILD" : "USER",
+        beneficiaryId: isChild ? beneficiary : profile.id,
+        beneficiaryName,
+      });
+      toast.show(
+        `Đã đặt gói ${formatVND(amountVND)} · mã ${orderId.slice(0, 6)}. Đến quầy thanh toán nhé.`,
+        "success",
+      );
+      router.replace("/home");
+    } catch (e) {
+      toast.show("Lỗi: " + (e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-md pb-24">
+      <header className="surface-glass sticky top-0 z-20 flex items-center gap-2 border-b border-slate-200/70 px-2 py-2">
+        <BackButton fallback="/services" />
+        <div>
+          <h1 className="text-lg font-bold text-brand-800">Vé lượt</h1>
+          <p className="text-xs text-slate-500">Đi nhóm dùng chung được</p>
+        </div>
+      </header>
+
+      <StepDots step={step} />
+
+      {step === "size" && (
+        <Section title="Chọn số lượt" subtitle="Trừ 1 lượt mỗi lần check-in">
+          {PACKAGE_SIZES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => {
+                setSize(s.id);
+                setStep("audience");
+              }}
+              className={`flex w-full items-center justify-between rounded-2xl border-2 p-4 text-left transition ${
+                size === s.id ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white"
+              }`}
+            >
+              <div>
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <Ticket className="size-4 text-amber-600" /> {s.label}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  {s.sessions} lượt · trừ dần mỗi lần vào
+                </div>
+              </div>
+              <div className="text-right text-xs text-slate-500">
+                Từ <span className="font-bold text-brand-700">{formatVND(pricing.package.CHILD_UNDER_140[s.id])}</span>
+              </div>
+            </button>
+          ))}
+        </Section>
+      )}
+
+      {step === "audience" && (
+        <Section
+          title="Áp dụng giá theo"
+          subtitle="Gói người lớn dùng cho mọi đối tượng; gói trẻ em chỉ trẻ em"
+          onBack={() => setStep("size")}
+        >
+          {AUDIENCES.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => {
+                setAudience(a.id);
+                setStep("beneficiary");
+              }}
+              className={`flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left transition ${
+                audience === a.id ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white"
+              }`}
+            >
+              <span className="text-3xl">{a.emoji}</span>
+              <div className="flex-1">
+                <div className="font-semibold text-slate-800">{a.label}</div>
+                <div className="text-xs text-slate-500">
+                  Giá {size ? formatVND(pricing.package[a.id][size]) : "—"}
+                </div>
+              </div>
+            </button>
+          ))}
+        </Section>
+      )}
+
+      {step === "beneficiary" && (
+        <Section
+          title="Chủ thẻ"
+          subtitle="Người đứng tên thẻ. Có thể dẫn nhiều người vào — mỗi người trừ 1 lượt"
+          onBack={() => setStep("audience")}
+        >
+          <BeneficiaryOption
+            active={beneficiary === "self"}
+            onClick={() => {
+              setBeneficiary("self");
+              setStep("confirm");
+            }}
+            emoji="🧔"
+            title={profile?.fullName || "(Chưa đặt tên)"}
+            subtitle="Bản thân"
+          />
+          {children.map((c) => (
+            <BeneficiaryOption
+              key={c.id}
+              active={beneficiary === c.id}
+              onClick={() => {
+                setBeneficiary(c.id);
+                setStep("confirm");
+              }}
+              emoji="🧒"
+              title={c.fullName}
+              subtitle="Con"
+            />
+          ))}
+          <Link
+            href="/children"
+            className="flex items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50/50 p-3 text-sm font-medium text-brand-700"
+          >
+            <Plus className="size-4" /> Thêm con
+          </Link>
+        </Section>
+      )}
+
+      {step === "confirm" && size && audience && beneficiary && (
+        <Section
+          title="Xác nhận đặt vé"
+          subtitle="Kiểm tra thông tin trước khi gửi"
+          onBack={() => setStep("beneficiary")}
+        >
+          <div className="space-y-2 rounded-2xl border-2 border-brand-200 bg-brand-50 p-4 text-sm">
+            <Row l="Loại" v="Vé lượt" />
+            <Row l="Gói" v={PACKAGE_SIZES.find((s) => s.id === size)?.label ?? size} />
+            <Row l="Áp dụng giá theo" v={AUDIENCES.find((a) => a.id === audience)?.label ?? audience} />
+            <Row l="Chủ thẻ" v={beneficiaryName + (isChild ? " (con)" : "")} />
+            <div className="my-2 border-t border-brand-200" />
+            <Row l="Tổng" v={<span className="text-lg font-extrabold text-brand-700">{formatVND(price)}</span>} />
+          </div>
+
+          <button onClick={confirm} disabled={busy} className="btn-primary w-full py-3.5 text-base">
+            {busy ? "Đang gửi…" : (
+              <>
+                <Check className="size-5" /> Xác nhận đặt vé
+              </>
+            )}
+          </button>
+          <p className="text-center text-xs text-slate-500">
+            Đơn ở trạng thái <b>chờ thanh toán</b> tại quầy lễ tân.
+          </p>
+        </Section>
+      )}
+    </main>
+  );
+}
+
+function StepDots({ step }: { step: Step }) {
+  const order: Step[] = ["size", "audience", "beneficiary", "confirm"];
+  const idx = order.indexOf(step);
+  return (
+    <div className="flex items-center justify-center gap-1.5 py-3">
+      {order.map((s, i) => (
+        <span
+          key={s}
+          className={`h-1.5 rounded-full transition-all ${
+            i === idx ? "w-6 bg-brand-600" : i < idx ? "w-1.5 bg-brand-400" : "w-1.5 bg-slate-200"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Section({
+  title,
+  subtitle,
+  onBack,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onBack?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3 px-4 pb-4 animate-fade-up">
+      <div>
+        <h2 className="text-base font-bold text-slate-800">{title}</h2>
+        {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+      </div>
+      {children}
+      {onBack && (
+        <button onClick={onBack} className="text-xs font-medium text-slate-500 underline">
+          ← Đổi lựa chọn trước
+        </button>
+      )}
+    </section>
+  );
+}
+
+function BeneficiaryOption({
+  active,
+  onClick,
+  emoji,
+  title,
+  subtitle,
+}: {
+  active: boolean;
+  onClick: () => void;
+  emoji: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${
+        active ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white"
+      }`}
+    >
+      <span className="text-2xl">{emoji}</span>
+      <div className="flex-1">
+        <div className="font-semibold">{title}</div>
+        <div className="text-xs text-slate-500">{subtitle}</div>
+      </div>
+    </button>
+  );
+}
+
+function Row({ l, v }: { l: string; v: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-slate-600">{l}</span>
+      <b className="text-right">{v}</b>
+    </div>
+  );
+}

@@ -5,6 +5,7 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase
 import { db } from "@/lib/firebase/client";
 import type { Notification } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { BackButton } from "@/components/BackButton";
 
 const ICONS: Record<string, string> = {
   CHILD_ATTENDED: "🎓", COURSE_REMAINING: "🎯", EXPIRY_WARNING: "⏰",
@@ -26,7 +27,8 @@ export default function NotificationsPage() {
 
   return (
     <main className="mx-auto max-w-md">
-      <header className="border-b bg-white px-5 py-4">
+      <header className="flex items-center gap-2 border-b bg-white px-3 py-3">
+        <BackButton fallback="/home" />
         <h1 className="text-xl font-bold text-brand-700">Thông báo</h1>
       </header>
       <div className="divide-y">

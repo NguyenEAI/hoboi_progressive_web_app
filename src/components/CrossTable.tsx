@@ -66,14 +66,19 @@ export function CrossTable({ matrix, hideTotal }: { matrix: Matrix; hideTotal?: 
               <tr key={p} className="border-t">
                 <td className="p-3 font-semibold text-slate-700">{PRODUCT_LABELS[p]}</td>
                 {p === "SWIM_COURSE" ? (
-                  <>
-                    <td className="p-3 text-right text-slate-400" colSpan={2}>
-                      <span className="text-[11px]">(giá phẳng, không chia đối tượng)</span>
-                    </td>
-                    <td className="p-3 text-right tab-nums">
-                      <CellView c={matrix.SWIM_COURSE.ALL} />
-                    </td>
-                  </>
+                  <td
+                    className="p-3 text-center text-slate-500"
+                    colSpan={audiences.length}
+                  >
+                    <span className="text-[11px] italic text-slate-400">
+                      (giá phẳng, không chia đối tượng)
+                    </span>
+                    {hideTotal && (
+                      <span className="ml-2">
+                        <CellView c={matrix.SWIM_COURSE.ALL} />
+                      </span>
+                    )}
+                  </td>
                 ) : (
                   audiences.map((a) => (
                     <td key={a} className="p-3 text-right tab-nums">
@@ -92,7 +97,10 @@ export function CrossTable({ matrix, hideTotal }: { matrix: Matrix; hideTotal?: 
           {!hideTotal && (
             <tr className="border-t bg-brand-50/50">
               <td className="p-3 font-bold text-brand-800">TỔNG</td>
-              <td colSpan={3} className="p-3 text-right font-extrabold text-brand-800 tab-nums">
+              <td
+                className="p-3 text-right font-extrabold text-brand-800 tab-nums"
+                colSpan={audiences.length + 1}
+              >
                 {totalCount} đơn · {formatVND(totalAmount)}
               </td>
             </tr>

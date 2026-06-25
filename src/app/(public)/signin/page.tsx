@@ -102,7 +102,7 @@ export default function SignInPage() {
       <div className="absolute inset-x-0 top-0 -z-10 h-[300px] overflow-hidden">
         <div className="hero-mesh hero-aurora absolute inset-0 opacity-20" />
         <FloatingOrbs />
-        <div className="pointer-events-none absolute inset-x-0 -bottom-px text-slate-50">
+        <div className="pointer-events-none absolute inset-x-0 -bottom-px text-[#f8fafc]">
           <WavePattern className="h-12 w-full" />
         </div>
       </div>
@@ -110,52 +110,52 @@ export default function SignInPage() {
       {step !== "name" && (
         <button
           onClick={() => (step === "otp" ? setStep("phone") : router.push("/"))}
-          className="btn-ghost -ml-1.5 self-start text-brand-700"
+          className="btn-ghost -ml-1.5 self-start text-brand-700 font-bold hover:bg-brand-50"
         >
-          <ArrowLeft className="size-4" /> Quay lại
+          <ArrowLeft className="size-4" strokeWidth={2.5} /> Quay lại
         </button>
       )}
 
       <div className="mt-4 flex flex-col items-center text-center animate-fade-up">
         <Logo size={68} glow />
-        <div className="mt-3 text-sm font-semibold text-slate-700">{POOL_INFO.shortName}</div>
-        <div className="text-[11px] text-slate-500">HT Bảo Lâm</div>
+        <div className="mt-3.5 text-sm font-extrabold tracking-tight text-slate-800">{POOL_INFO.shortName}</div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">HT Bảo Lâm</div>
       </div>
 
       {/* Step indicator */}
-      <div className="mx-auto mt-6 flex w-40 items-center gap-1.5">
+      <div className="mx-auto mt-6 flex w-44 items-center gap-2">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className={`h-1 flex-1 rounded-full transition-all duration-500 ${
-              i <= stepIndex ? "bg-brand-500" : "bg-slate-200"
+            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+              i <= stepIndex ? "bg-brand-500 shadow-[0_0_8px_rgba(5,150,105,0.4)]" : "bg-slate-200"
             }`}
           />
         ))}
       </div>
 
-      <div className="card-glass mt-4 flex-1 p-5 animate-fade-up">
+      <div className="card-glass mt-5 flex-1 p-6 border border-brand-100/30 shadow-float bg-white/80">
         <div className="flex items-center gap-2 text-brand-700">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-100">
-            <StepIcon className="size-4" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 shadow-sm border border-brand-100">
+            <StepIcon className="size-4 text-brand-600" />
           </span>
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+          <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
             Bước {stepIndex + 1}/3
           </span>
         </div>
 
         {step === "phone" && (
-          <>
-            <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-brand-800">
+          <div className="animate-fade-up">
+            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">
               Đăng nhập
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Nhập số điện thoại để nhận mã OTP
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Nhập số điện thoại để nhận mã OTP xác thực
             </p>
 
-            <label className="mt-6 block text-sm font-medium">Số điện thoại</label>
-            <div className="mt-1 flex items-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 transition-colors focus-within:border-brand-400">
-              <span className="flex items-center gap-1.5 border-r border-slate-200 pr-2.5 text-slate-600">
+            <label className="mt-6 block text-xs font-bold uppercase tracking-wider text-slate-500">Số điện thoại</label>
+            <div className="mt-1.5 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 shadow-sm transition-all focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10">
+              <span className="flex items-center gap-1.5 border-r border-slate-100 pr-3 text-slate-400 text-sm font-semibold">
                 <span aria-hidden>🇻🇳</span>
               </span>
               <input
@@ -164,36 +164,36 @@ export default function SignInPage() {
                 inputMode="numeric"
                 autoComplete="tel"
                 maxLength={10}
-                className="w-full bg-transparent p-3 outline-none placeholder:text-slate-400 tab-nums"
+                className="w-full bg-transparent py-4 outline-none placeholder:text-slate-300 text-base font-semibold tracking-wide text-slate-800 tab-nums"
                 placeholder="0947010978"
               />
             </div>
-            <p className="mt-1.5 text-[11px] text-slate-500">
-              Nhập đủ 10 số (bắt đầu bằng 0). Ví dụ: 0947010978
+            <p className="mt-2 text-[11px] font-medium text-slate-400">
+              Nhập đủ 10 số bắt đầu bằng 0 (ví dụ: 0947010978)
             </p>
 
             <button
               onClick={sendOtp}
               disabled={busy || !isValidVNPhone10(phone)}
-              className="btn-primary mt-5 w-full"
+              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
             >
-              {busy ? "Đang gửi…" : "Gửi mã OTP"}
+              {busy ? "Đang gửi OTP…" : "Gửi mã OTP"}
             </button>
 
-            <p className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
+            <p className="mt-6 flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-400">
               <ShieldCheck className="size-3.5 text-brand-500" />
               Bảo mật bằng OTP · Không lưu mật khẩu
             </p>
-          </>
+          </div>
         )}
 
         {step === "otp" && (
-          <>
-            <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-brand-800">
+          <div className="animate-fade-up">
+            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">
               Nhập mã OTP
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Mã 6 số đã gửi đến <b className="text-slate-700">{normalizeVNPhone(phone)}</b>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Mã xác nhận 6 số đã được gửi tới <b className="text-slate-700 font-semibold">{normalizeVNPhone(phone)}</b>
             </p>
 
             <input
@@ -203,62 +203,62 @@ export default function SignInPage() {
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
-              className="mt-6 w-full rounded-2xl border-2 border-slate-200 bg-white p-4 text-center text-3xl font-bold tracking-[0.5em] outline-none transition-colors focus:border-brand-400"
-              placeholder="• • • • • •"
+              className="mt-6 w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 text-center text-3xl font-extrabold tracking-[0.5em] text-brand-800 outline-none transition-all focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+              placeholder="••••••"
             />
 
             <button
               onClick={verifyOtp}
               disabled={busy || code.length < 6}
-              className="btn-primary mt-5 w-full"
+              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
             >
-              {busy ? "Đang xác nhận…" : "Xác nhận"}
+              {busy ? "Đang xác nhận…" : "Xác nhận & Tiếp tục"}
             </button>
 
-            <div className="mt-4 flex items-center justify-between text-sm">
+            <div className="mt-5 flex items-center justify-between text-xs font-semibold">
               <button
                 onClick={() => { setStep("phone"); setConfirm(null); setCode(""); }}
-                className="text-slate-500"
+                className="text-slate-400 hover:text-slate-600 transition-colors"
               >
                 Đổi số điện thoại
               </button>
               {resendIn > 0 ? (
                 <span className="text-slate-400">Gửi lại sau {resendIn}s</span>
               ) : (
-                <button onClick={sendOtp} className="font-semibold text-brand-700">
-                  Gửi lại mã
+                <button onClick={sendOtp} className="text-brand-600 hover:text-brand-800 transition-colors">
+                  Gửi lại mã OTP
                 </button>
               )}
             </div>
-          </>
+          </div>
         )}
 
         {step === "name" && (
-          <>
-            <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-brand-800">
+          <div className="animate-fade-up">
+            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">
               Hoàn tất hồ sơ
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Cho chúng tôi biết tên để hiển thị trên thẻ hội viên
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Vui lòng cho biết họ và tên để in lên thẻ hội viên
             </p>
 
-            <label className="mt-6 block text-sm font-medium">Họ và tên</label>
+            <label className="mt-6 block text-xs font-bold uppercase tracking-wider text-slate-500">Họ và tên</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
-              className="input mt-1"
+              className="input mt-1.5 py-4 font-semibold text-slate-800"
               placeholder="Vd: Nguyễn Văn A"
             />
 
             <button
               onClick={saveName}
               disabled={busy || !name.trim()}
-              className="btn-primary mt-5 w-full"
+              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
             >
-              {busy ? "Đang lưu…" : "Hoàn tất"}
+              {busy ? "Đang hoàn tất…" : "Hoàn tất đăng ký"}
             </button>
-          </>
+          </div>
         )}
       </div>
 

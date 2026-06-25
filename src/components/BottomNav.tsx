@@ -21,18 +21,18 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Floating CTA */}
+      {/* Floating CTA Check-in QR */}
       <Link
         href="/checkin"
         aria-label="Quét QR check-in"
-        className="absolute left-1/2 -top-6 z-10 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-elevated ring-4 ring-white"
+        className="absolute left-1/2 -top-7 z-10 flex h-15 w-15 -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 via-brand-600 to-brand-700 text-white shadow-[0_8px_20px_rgba(5,150,105,0.4)] ring-4 ring-white transition-all duration-200 active:scale-90"
       >
-        {p.startsWith("/checkin") && <span aria-hidden className="nav-halo" />}
-        <QrCode className="size-7" strokeWidth={2.3} />
+        <span aria-hidden className="nav-halo" />
+        <QrCode className="size-6.5 text-white" strokeWidth={2.4} />
       </Link>
 
-      {/* Bar */}
-      <div className="border-t border-slate-200/60 surface-glass">
+      {/* Bar with smooth glassmorphism */}
+      <div className="border-t border-slate-100/70 bg-white/90 backdrop-blur-md shadow-[0_-8px_30px_rgba(15,23,42,0.06)]">
         <ul className="grid grid-cols-5 items-end">
           {left.map((it) => (
             <NavItem key={it.href} item={it} active={p.startsWith(it.href)} />
@@ -60,21 +60,21 @@ function NavItem({
       <Link
         href={item.href}
         className={cn(
-          "relative flex flex-col items-center gap-0.5 py-2.5 text-[10.5px] font-medium transition-colors",
-          active ? "text-brand-700" : "text-slate-400 hover:text-slate-600"
+          "relative flex flex-col items-center gap-1.5 py-3 text-[10px] font-extrabold uppercase tracking-wider transition-colors",
+          active ? "text-brand-700 font-extrabold" : "text-slate-400 hover:text-slate-600 font-semibold"
         )}
       >
         <span
           className={cn(
             "flex h-9 w-9 items-center justify-center rounded-2xl transition-all",
-            active && "bg-brand-100 shadow-sm"
+            active && "bg-brand-50 shadow-sm border border-brand-100/30 text-brand-600"
           )}
         >
-          <Icon className="size-[18px]" strokeWidth={active ? 2.4 : 2} />
+          <Icon className="size-[17px]" strokeWidth={active ? 2.6 : 2} />
         </span>
-        {item.label}
+        <span className="text-[9.5px] tracking-wide">{item.label}</span>
         {active && (
-          <span className="absolute -top-px h-0.5 w-6 rounded-full bg-brand-600" />
+          <span className="absolute -top-px h-[3px] w-6 rounded-b-full bg-brand-600 shadow-[0_1px_4px_rgba(5,150,105,0.4)]" />
         )}
       </Link>
     </li>

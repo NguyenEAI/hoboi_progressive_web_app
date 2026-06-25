@@ -1,8 +1,8 @@
 # Implementation Plan — Hồ Bơi Prosper Plaza
 
-> **Phiên bản**: 2.2 (bổ sung 8 chỉnh sửa UAT v2.1 của PRD — xem §17)
-> **Tài liệu mẹ**: [`PRD.md`](./PRD.md) v2.1
-> **Trạng thái dự án**: Phase 1–10 ✅ · Đang UAT (round 3 — UI/UX feedback) · Vercel chưa
+> **Phiên bản**: **2.4** (bổ sung 4 chỉnh sửa UAT round 5 — xem §19)
+> **Tài liệu mẹ**: [`PRD.md`](./PRD.md) v2.1 + [`../CLAUDE.md`](../CLAUDE.md) v2.4
+> **Trạng thái dự án**: Phase 1–10 ✅ · Phase 11 (UAT) đang round 5 — feedback Owner ngày 2026-06-23 · Vercel chưa
 
 ---
 
@@ -586,6 +586,9 @@ npx tsx seed/setRole.ts +84947010978 OWNER
 | 2.0 | 2026-06-16 | Claude (Opus 4.7) + Deep Research | Viết lại theo best practices: App Check, Transactions, Cloud Functions v2 concurrency, iOS Web Push, PDPL compliance, cost estimate, monitoring, backup plan, testing strategy |
 | 2.1 | 2026-06-17 | Claude (Opus 4.7) | UI/UX overhaul + bug fixes (chi tiết §16) |
 | **2.2** | **2026-06-17** | **Claude (Opus 4.7) + Owner UAT feedback** | **Triển khai 8 chỉnh sửa PRD v2.1 (chi tiết §17)** |
+| **2.3** | **2026-06-22** | **Claude (Opus 4.7) + Owner UAT round 4** | **9 chỉnh sửa D1–D9: xóa đơn 1-click, back button, fix logout admin, fix wizard khóa, lễ tân duyệt vé lượt, bỏ chiều cao trẻ, restructure flow Dịch vụ, fix khách hàng rỗng, điểm danh hộ vé lượt (§18)** |
+| **2.4** | **2026-06-23** | **Claude (Opus 4.7) + Owner UAT round 5** | **4 chỉnh sửa E1–E4: fix điểm danh hộ không tìm thấy khách (Auth fallback), restructure check-in khách (bỏ "Số người cùng vào" + bộ chọn thẻ), hàng đợi lễ tân audio beep, màn HLV hoàn thiện ghi chú + báo nghỉ + highlight vắng (§19)** |
+| **2.4.1** | **2026-06-23** | **Claude (Opus 4.7) + Owner hotfix** | **4 sửa F1–F4: bỏ vé thời hạn khỏi check-in (chỉ /cards), đảo E1 thành auto-create doc placeholder, thêm syncAllAuthUsersToFirestore + nút Đồng bộ Auth, ghi lại quy trình deploy (§19.6)** |
 
 ## 16. Lịch sử bug fix & UI polish (v2.1 — 2026-06-17)
 
@@ -785,6 +788,916 @@ Triển khai 8 hạng mục C1–C8 trong PRD §14. Sắp theo thứ tự thực
 | C5 | Gỡ nhầm quyền Owner duy nhất → khóa hệ thống. | Bảo vệ "≥1 OWNER" + có script `seed/setRole.ts +84... OWNER` để khôi phục bằng service account. |
 | C3b | Xóa đơn PAID làm khó kế toán đối soát. | Audit log giữ đủ thông tin để revert thủ công; orderDeleted flag thay vì xóa data cứng cũng OK. |
 | C4 | Khách cũ đã quen UI "+84" có thể bối rối → thêm hint nhỏ "Nhập đủ 10 số (bắt đầu bằng 0)". | UI-only, revert nhanh. |
+
+---
+
+---
+
+## 18. v2.3 Implementation — 9 chỉnh sửa từ UAT round 4 (2026-06-22)
+
+Triển khai 9 hạng mục D1–D9 do Owner phản hồi sau khi dùng thử trên local. Sắp theo độ rủi ro (thấp → cao) để PR nhỏ + dễ rollback.
+
+### 18.1 Tổng quan task list
+
+| # | Task | Files chính | Backend? | Ước tính |
+|---|---|---|---|---|
+| D3 | Fix logout ẩn ở subpage admin | [src/app/(staff)/admin/layout.tsx](../src/app/(staff)/admin/layout.tsx) + [components/AdminSidebar.tsx](../src/components/AdminSidebar.tsx) | — | 30 phút |
+| D2 | Back button toàn cục | mới [components/BackButton.tsx](../src/components/BackButton.tsx) + chèn vào ~12 page | — | 1.5h |
+| D6 | Bỏ chiều cao ở form trẻ em | [src/app/(customer)/children/page.tsx](../src/app/(customer)/children/page.tsx) | — | 30 phút |
+| D8 | Fix `/admin/customers` rỗng | [src/app/(staff)/admin/customers/page.tsx](../src/app/(staff)/admin/customers/page.tsx) + firestore.rules check | — (có thể cần rules) | 1h |
+| D1 | Xóa đơn 1-click | [src/app/(staff)/admin/orders/page.tsx](../src/app/(staff)/admin/orders/page.tsx) + [functions/src/admin.ts:deleteOrder](../functions/src/admin.ts) | ✅ bỏ require `reason` | 45 phút |
+| D7 | Restructure flow Dịch vụ | viết lại [src/app/(customer)/services/page.tsx](../src/app/(customer)/services/page.tsx) + tách subroute `services/pass` `services/package` `services/course` | — | 3h |
+| D4 | Fix wizard khóa học bug "Thiếu HLV" | [src/app/(customer)/services/course/page.tsx](../src/app/(customer)/services/course/page.tsx) + [functions/src/orders.ts:createOrder](../functions/src/orders.ts) | ✅ kiểm tra payload contract | 1.5h |
+| D9 | Điểm danh hộ cho vé lượt | [src/app/(staff)/admin/checkin-assist/page.tsx](../src/app/(staff)/admin/checkin-assist/page.tsx) + [functions/src/checkin.ts:staffCheckinByPhone](../functions/src/checkin.ts) | ✅ thêm branch PACKAGE | 1.5h |
+| D5 | Vé lượt: lễ tân duyệt check-in | mới `/checkinRequests` collection + [functions/src/checkin.ts](../functions/src/checkin.ts) thêm `requestCheckin/approveCheckin/rejectCheckin` + UI customer chờ + UI lễ tân hàng đợi | ✅ mới 3 functions + cron expire | 4h |
+
+**Tổng**: ~14h dev + 2h test = 2 ngày làm việc.
+
+### 18.2 Chi tiết kỹ thuật từng task
+
+#### D3 — Fix logout ẩn ở `/admin/products` `/admin/reports` (rủi ro: thấp)
+
+**Phỏng đoán nguyên nhân**: nút logout nằm trong `AdminSidebar` (desktop) hoặc topbar (mobile). Khi vào subpage, layout có thể wrap trong container `overflow-hidden` cao bằng viewport → footer sidebar bị cắt. Hoặc subpage tự render header riêng đè lên topbar.
+
+**Fix**:
+- Kiểm tra [src/app/(staff)/admin/layout.tsx](../src/app/(staff)/admin/layout.tsx) — sidebar phải `flex-col h-screen`, nút logout `mt-auto` (đẩy xuống đáy). Main content `overflow-y-auto`.
+- Mobile: thêm topbar persistent (sticky top-0) chứa logo + nút logout icon, render ở layout — KHÔNG để các subpage tự định nghĩa header.
+- Test: navigate `/admin → /admin/products → /admin/reports`, đảm bảo nút logout luôn click được.
+
+#### D2 — Back button toàn cục (rủi ro: thấp)
+
+- Tạo `src/components/BackButton.tsx`:
+  ```tsx
+  "use client";
+  import { ArrowLeft } from "lucide-react";
+  import { useRouter } from "next/navigation";
+  export function BackButton({ fallback = "/" }: { fallback?: string }) {
+    const router = useRouter();
+    return (
+      <button onClick={() => { if (window.history.length > 1) router.back(); else router.replace(fallback); }}
+              className="p-2 -ml-2 rounded-full hover:bg-black/5" aria-label="Quay lại">
+        <ArrowLeft className="size-5" />
+      </button>
+    );
+  }
+  ```
+- Chèn `<BackButton />` vào header trái của các trang **không phải tab root**:
+  - Customer: `services/*`, `checkin`, `cards`, `children`, `notifications`, `my-courses/*` (chi tiết khóa, không phải list).
+  - Admin: `orders`, `products`, `coaches`, `customers`, `staff`, `reports`, `qr-gate`, `checkin-assist` — sidebar có nav, nhưng mobile cần back.
+  - Coach: `students` (list dạy).
+- KHÔNG chèn ở: `(customer)/home`, `(staff)/admin` (root), `(coach)/coach` (root), `(public)/signin`.
+
+#### D6 — Bỏ chiều cao ở form đăng ký trẻ em (rủi ro: thấp)
+
+- Form `(customer)/children/page.tsx`: bỏ input `heightCm` khỏi modal Thêm/Sửa. Không xóa field khỏi schema (vẫn optional trong `Child` type).
+- Update text hint: "Chiều cao sẽ được xác định khi mua thẻ tại quầy."
+- Không cần migration — docs cũ có heightCm vẫn dùng được.
+- Khi mua thẻ: ở wizard chọn audience (radio trẻ <1.4m / ≥1.4m / người lớn) — đã có trong D7.
+
+#### D8 — Fix `/admin/customers` rỗng (rủi ro: trung — cần debug query)
+
+**Phỏng đoán**: 
+- Query có thể filter `where("role","==","CUSTOMER")` nhưng user mới đăng ký có `role: undefined` (do `ensureUserDoc` ghi `role:"CUSTOMER"` nhưng có race condition) → bị loại.
+- Hoặc rules `/users/{uid}` cấm read cross-user trừ self → staff query bị deny silently.
+
+**Fix**:
+1. Kiểm tra `firestore.rules` cho `/users`: cho phép `isStaff()` read list.
+2. Đổi query thành `where("role","in",["CUSTOMER","PARENT"])` để bắt cả 2 role (PARENT v1 = CUSTOMER nhưng phòng hờ).
+3. Hoặc bỏ filter role và lọc client-side: `where("phone","!=","")` để loại staff/coach (vì phone luôn có với customer thật).
+4. Thêm console.warn nếu snap.empty để debug.
+5. Test: tạo 2 customer test → reload page → thấy đủ 2 dòng.
+
+#### D1 — Xóa đơn 1-click (rủi ro: thấp)
+
+- Functions `deleteOrder`:
+  - **Bỏ** require `reason` (vẫn chấp nhận nếu client gửi để audit).
+  - Vẫn yêu cầu `requireOwner`.
+  - **Xóa thực sự** doc `/orders/{id}` (current v2.2 không xóa cứng cho PAID — chỉ set `orderDeleted:true`). v2.3: dùng `transaction.delete(orderRef)`.
+  - Set `orderDeleted:true` trên membership/ticketPackage/enrollment liên kết (để báo cáo realtime loại ra).
+  - Tương ứng xóa `/payments/{paymentId}` của order đó (hoặc set `orderDeleted:true`).
+  - Audit log `DELETE_ORDER` với `detail: { prevStatus, productType, amountVND, beneficiaryName }` để recovery thủ công nếu cần.
+- UI `admin/orders`: nút "Xóa" cho Owner ở mọi trạng thái → onClick gọi callable **trực tiếp**, không dialog. Toast "Đã xóa đơn #abc" + undo trong 5s? → v1 không cần undo, audit log đủ.
+- **Lưu ý report**: query reports phải filter `orderDeleted:true` ra (`where("orderDeleted","!=",true)` không hoạt động trên field thiếu → giải pháp: lưu `orderDeleted:false` mặc định khi tạo order; query `where("orderDeleted","==",false)`).
+- Migration: backfill 1 lần các order cũ → thêm `orderDeleted:false`. Có thể chạy 1 callable temp hoặc script trong `seed/`.
+
+#### D7 — Restructure flow Dịch vụ (rủi ro: trung — UI lớn nhưng không đụng data)
+
+**Trang chính** `(customer)/services/page.tsx` viết lại:
+- Hiển thị 3 card lớn:
+  1. **Học bơi** — gradient xanh-cyan, badge "🔥 Phổ biến nhất", emoji 🏊, "Từ 1.800.000₫ · 15 buổi · Có HLV chuyên nghiệp" → click `/services/course`.
+  2. **Vé thời hạn** — card trắng border xanh, "Không giới hạn lượt · 1/3/6/12 tháng" → click `/services/pass`.
+  3. **Vé lượt** — card trắng, "15 / 30 lượt · Đi nhóm OK" → click `/services/package`.
+
+**Trang vé lượt** mới `(customer)/services/package/page.tsx`:
+- Step 1: chọn gói (radio 2 option: "15 lượt" / "30 lượt") với giá cập nhật theo audience.
+- Step 2: chọn áp dụng giá theo (radio 3: trẻ <1.4m / trẻ ≥1.4m / người lớn).
+- Step 3: chọn người thụ hưởng (bản thân / con — nếu có).
+- Step 4: review + xác nhận → callable `createOrder({ productType:"PACKAGE", productSnapshot:{packageSize,audience}, beneficiary…})`.
+
+**Trang vé thời hạn** mới `(customer)/services/pass/page.tsx`:
+- Step 1: chọn duration (1T / 3T / 6T / 1N).
+- Step 2: chọn audience.
+- Step 3: chọn người thụ hưởng.
+- Step 4: review + xác nhận → callable `createOrder({ productType:"PASS", ...})`.
+
+**Wizard khóa học** `(customer)/services/course/page.tsx`: giữ flow 4 bước, chỉ thêm back button + fix bug D4.
+
+Tách subroute giúp:
+- Mỗi flow đơn giản, không 1 page khổng lồ.
+- Back button hoạt động đúng (back về `/services` không phải bước trước nữa).
+- Bundle nhỏ hơn.
+
+#### D4 — Fix wizard khóa học bug "Thiếu HLV/khung giờ/ngày bắt đầu" (rủi ro: trung — cần repro)
+
+**Triệu chứng** (ảnh user gửi): user đã chọn đầy đủ Học cho ai (con "bo") + Kiểu (bướm) + HLV (Thầy Tín) + Khung giờ (9h–10h T3-T5-T7) + Ngày (23/06/2026) nhưng vẫn báo lỗi khi bấm "Xác nhận đăng ký".
+
+**Phỏng đoán nguyên nhân**:
+1. Client gửi payload thiếu key (vd: `coachId` lưu trong state nhưng quên include khi build `data`). Hoặc gửi `slotId` cũ thay vì `hourGroup` mới (lệch contract v2.2 ↔ server).
+2. Backend `createOrder` validate `slotId && startDate && coachId` (theo schema cũ) trong khi v2.2 đổi sang `hourGroup + weekOffset` — chưa cập nhật hoàn chỉnh.
+3. `nextOccurrence` trả về `null` khi không có slot match → throw "Thiếu khung giờ".
+
+**Fix**:
+1. Đọc current `services/course/page.tsx` + `functions/src/orders.ts:createOrder` để xem contract thực tế.
+2. Đồng bộ: client gửi gì → server validate đó. Khi thiếu key cụ thể, throw với tên key đó (vd: "Thiếu coachId") thay vì gộp chung "Thiếu HLV/khung giờ/ngày bắt đầu" → debug nhanh.
+3. Test:
+   - Đăng ký 1 khóa cho bản thân — phải tạo được order PENDING.
+   - Đăng ký cho con — tương tự.
+   - +1 tuần / −1 tuần — phải đẩy đúng 7 ngày.
+
+#### D9 — Điểm danh hộ cho vé lượt (rủi ro: trung)
+
+**Backend** `functions/src/checkin.ts:staffCheckinByPhone` (hoặc tạo callable mới `staffCheckinByPhoneForPackage` cho rõ):
+- Hiện tại chỉ hỗ trợ ENROLLMENT (khóa học).
+- Mở rộng: nhận thêm `kind: "ENROLLMENT" | "PACKAGE"` + `count?: number` (nếu PACKAGE).
+- Logic PACKAGE:
+  - Tra ticketPackage theo `userId` (parent hoặc bản thân) — ACTIVE + còn ≥ count lượt.
+  - Transaction trừ `remainingSessions`, push usageHistory.
+  - Tạo `/checkins` doc với `source:"STAFF"`.
+  - Audit log `STAFF_CHECKIN_PACKAGE` + push khách.
+
+**UI lễ tân** `admin/checkin-assist/page.tsx`:
+- Sau khi tra SĐT → hiển thị **list thẻ ACTIVE của khách** (membership + ticketPackage + enrollment).
+- Mỗi card có nút "Điểm danh":
+  - Membership → 1 chạm trừ ngày.
+  - TicketPackage → mở dialog nhập "Số lượt cần trừ" (default 1, range 1..remaining) → xác nhận.
+  - Enrollment (khóa) → 1 chạm điểm danh buổi hôm nay.
+
+#### D5 — Vé lượt: lễ tân duyệt check-in (rủi ro: cao — flow mới)
+
+**Data**: new collection `/checkinRequests/{id}` (schema xem CLAUDE.md §10).
+
+**Backend** `functions/src/checkin.ts`:
+
+```ts
+// Khách quét QR (thay cho checkinByQr với PACKAGE)
+export const requestCheckin = onCall({ region }, async (req) => {
+  requireAuth(req);
+  const { qrTokenId, ticketPackageId, suggestedCount } = req.data;
+  // verify qrToken, consume
+  // verify ticketPackage thuộc user + ACTIVE + còn đủ lượt
+  // tạo /checkinRequests/{id} status PENDING expiresAt = now+2m
+  // push lễ tân
+  return { requestId };
+});
+
+// Lễ tân duyệt
+export const approveCheckin = onCall({ region }, async (req) => {
+  requireStaff(req);
+  const { requestId, approvedCount } = req.data;
+  // transaction: load request (must be PENDING + not expired)
+  // load ticketPackage, trừ approvedCount
+  // tạo /checkins doc
+  // update request: status=APPROVED, approvedCount, resolvedAt, resolvedBy, checkinId
+  // push khách (FCM + inbox)
+  return { ok: true };
+});
+
+export const rejectCheckin = onCall({ region }, async (req) => {
+  requireStaff(req);
+  // tương tự, status=REJECTED + lý do
+});
+```
+
+**Không TTL** (quyết định Owner 2026-06-22): request giữ `PENDING` vô thời hạn — không cron expire. Khách có thể chủ động hủy bằng callable `cancelCheckinRequest` (chỉ chính chủ).
+
+**Rules** `firestore.rules`: 
+- `/checkinRequests/{id}`: read self / staff; write **none** (callable only).
+
+**UI customer** `(customer)/checkin/page.tsx`:
+- Khi quét QR với vé lượt → gọi `requestCheckin` → nhận `requestId`.
+- Listen `/checkinRequests/{requestId}` realtime onSnapshot:
+  - `PENDING` → spinner "Đang chờ lễ tân duyệt..." + nút "Hủy yêu cầu" (gọi `cancelCheckinRequest`).
+  - `APPROVED` → toast success "Đã trừ X lượt · còn Y" + animation tick.
+  - `REJECTED` → toast error + lý do.
+  - `CANCELLED` (khách tự hủy) → đóng pop-up.
+- Vé thời hạn (membership) → giữ luồng cũ `checkinByQr` (trực tiếp).
+
+**UI lễ tân** `admin/page.tsx` (dashboard) hoặc trang riêng `/admin/queue`:
+- Section "Hàng đợi check-in vé lượt" — listen `/checkinRequests` `where("status","==","PENDING").orderBy("createdAt","asc")`.
+- Mỗi row: tên khách + tên thẻ + suggestedCount → 2 button "Duyệt" (mở dialog chỉnh `approvedCount` → xác nhận) / "Từ chối" (mở dialog nhập lý do).
+- Audio beep + visual highlight khi có request mới (Notification API hoặc đơn giản dùng audio HTML5).
+
+**Index**: `/checkinRequests (status, createdAt asc)`.
+
+### 18.3 Thứ tự deploy đề xuất
+
+1. **PR #1 — UI quick wins**: D3 + D2 + D6 — không backend, ship nhanh.
+2. **PR #2 — Bugfix data**: D8 + D4 — debug + fix, có thể cần rules update.
+3. **PR #3 — Owner UX**: D1 — backend + UI, deploy functions trước.
+4. **PR #4 — Service restructure**: D7 — refactor lớn, làm cẩn thận.
+5. **PR #5 — Receptionist powers**: D9 + D5 — feature mới, UAT kỹ với 2 thiết bị (khách + lễ tân) đồng thời.
+
+### 18.4 Testing checklist v2.3
+
+- [ ] **D1**: Owner bấm Xóa → đơn biến mất ngay, không dialog. Auditlog có entry. Báo cáo không tính đơn đã xóa.
+- [ ] **D2**: Vào `/services/course` → bấm ← → về `/services`. Vào `/my-courses/abc` → ← → về `/my-courses`. Trên home không có nút ← (đúng).
+- [ ] **D3**: `/admin → /admin/products → /admin/reports` → nút Đăng xuất luôn click được trên cả desktop + mobile.
+- [ ] **D4**: Đăng ký khóa bơi cho con → KHÔNG còn báo "Thiếu HLV/khung giờ/ngày bắt đầu". Order PENDING được tạo. Slot.enrolledCount +1.
+- [ ] **D5**: 
+  - Khách quét QR vé lượt → màn khách "Đang chờ lễ tân...". 
+  - Màn lễ tân hiện request mới (beep). 
+  - Lễ tân chỉnh số lượt 4→2 → duyệt → khách thấy "Đã trừ 2 lượt".
+  - Lễ tân từ chối → khách thấy lý do.
+  - Để 2 phút không duyệt → cron expire → khách thấy "Hết hạn".
+- [ ] **D6**: Form thêm trẻ em không có ô chiều cao. Vẫn lưu được trẻ mới.
+- [ ] **D7**: 
+  - Vào `/services` thấy Học bơi nổi bật đứng đầu.
+  - Chọn Vé lượt → 15 lượt → trẻ <1.4m → bản thân → review giá 300k → xác nhận → order PENDING.
+  - Tương tự Vé thời hạn.
+- [ ] **D8**: Owner vào `/admin/customers` → thấy đủ N khách hàng. Search SĐT hoạt động.
+- [ ] **D9**: Lễ tân `/admin/checkin-assist` tra SĐT khách quên điện thoại → hiện list thẻ → chọn vé lượt → nhập 3 lượt → xác nhận → khách nhận push.
+- [ ] **Regression**: 
+  - Vé thời hạn quét QR vẫn check-in trực tiếp (không qua queue).
+  - Check-in khóa học qua QR (nếu có) vẫn hoạt động.
+  - Lễ tân không vào được `/admin/reports`.
+
+### 18.5 Rủi ro & rollback
+
+| Task | Rủi ro | Rollback |
+|---|---|---|
+| D1 | Xóa nhầm đơn vĩnh viễn | Audit log giữ snapshot `{prevStatus, productType, amountVND, beneficiary}` — recovery thủ công bằng script tạo lại order. |
+| D5 | Khách offline khi lễ tân duyệt → push không tới | Cron expire 2 phút + UI khách show TTL countdown để khách biết refresh; lễ tân vẫn thấy "đã duyệt" trong list `/checkins`. |
+| D7 | Đơn cũ trong DB có productSnapshot khác format → trang chi tiết đơn hiển thị "—" | Giữ legacy fields trong productSnapshot, không xóa; UI fallback "(không có thông tin)". |
+| D4 | Fix bug nhưng phát sinh regression khác | Test cả 3 case (bản thân/con/+1 tuần) trước khi deploy. |
+| D8 | Mở rộng rules `/users` cho staff read all → leak phone | Chỉ allow `list` nếu role==OWNER hoặc RECEPTIONIST. Customer field nhạy cảm (fcmTokens) không trả về client thông qua security rules. |
+
+### 18.6 Files mới sẽ tạo
+
+```
+src/components/BackButton.tsx               (D2)
+src/app/(customer)/services/pass/page.tsx   (D7)
+src/app/(customer)/services/package/page.tsx (D7)
+functions/src/checkin.ts                    (D5 — add 3 functions)
+firestore/firestore.indexes.json            (D5 — add 1 index)
+```
+
+---
+
+## 19. v2.4 Implementation — 4 chỉnh sửa từ UAT round 5 (2026-06-23)
+
+Triển khai 4 hạng mục E1–E4 do Owner phản hồi sau khi dùng thử v2.3 trên local.
+
+### 19.1 Tổng quan task list
+
+| # | Task | Files chính | Backend? | Ước tính |
+|---|---|---|---|---|
+| E1 | Fix bug điểm danh hộ: SĐT khách không tìm thấy (Auth fallback chỉ chẩn đoán, KHÔNG auto-create) | [functions/src/checkin.ts:staffCheckinByPhone](../functions/src/checkin.ts) + [src/app/(staff)/admin/checkin-assist/page.tsx](../src/app/(staff)/admin/checkin-assist/page.tsx) | ✅ thêm callable `searchCustomerByPhone` + refactor `staffCheckinByPhone` | 1h |
+| E2 | Customer check-in restructure: bỏ "Số người cùng vào" + bộ chọn thẻ + `forceKind` | [src/app/(customer)/checkin/page.tsx](../src/app/(customer)/checkin/page.tsx) + [functions/src/checkin.ts](../functions/src/checkin.ts) | ✅ `checkinByQr`/`requestCheckin` accept `forceKind`, `targetId` | 2.5h |
+| E3 | Dashboard lễ tân: audio beep + highlight khi có request mới | [src/components/CheckinQueue.tsx](../src/components/CheckinQueue.tsx) + thêm `public/beep.mp3` (hoặc Web Audio API tone) | — | 45 phút |
+| E4 | Màn HLV hoàn thiện: ghi chú HV + báo nghỉ ca + highlight HV vắng ≥3 buổi | [src/app/(coach)/coach/students/page.tsx](../src/app/(coach)/coach/students/page.tsx) + [page.tsx](../src/app/(coach)/coach/page.tsx) + [functions/src/coach.ts](../functions/src/coach.ts) mới + [firestore.rules](../firestore/firestore.rules) | ✅ 2 callables mới `addCoachNote`, `reportCoachAbsence` + collection `/coaches/{id}/absences` | 4h |
+
+**Tổng**: ~9h dev + 1.5h test = 1.5 ngày làm việc.
+
+### 19.2 Chi tiết kỹ thuật từng task
+
+#### E1 — Fix điểm danh hộ không tìm thấy khách (rủi ro: trung)
+
+**Triệu chứng** (Owner UAT 2026-06-23): tạo test number `0900000002` ở Firebase Console (Authentication → Phone Test Numbers) nhưng `/admin/checkin-assist` tra SĐT → "Không tìm thấy khách với SĐT này".
+
+**Phỏng đoán nguyên nhân**:
+1. **Test number trong Auth không tự sinh `/users/{uid}` doc** — chỉ khi user thực sự đăng nhập app + hoàn tất bước "tên" thì `useAuthUser.ensureUserDoc()` mới được gọi.
+2. Hoặc user đã đăng nhập một lần nhưng dropout giữa bước OTP và bước tên → Firebase Auth có user, Firestore không có doc.
+
+**Giải pháp**:
+
+1. **Callable mới** `searchCustomerByPhone` trong [functions/src/staff.ts](../functions/src/staff.ts):
+   ```ts
+   export const searchCustomerByPhone = onCall({ region }, async (req) => {
+     requireStaff(req);
+     const raw = String(req.data?.phone ?? "").trim();
+     const e164 = normalizeVNPhone(raw); // throw nếu sai format
+     const local = "0" + e164.slice(3);
+     // 1) Tra Firestore trước (chấp nhận cả 3 format lưu)
+     const q = await db.collection("users")
+       .where("phone", "in", [raw, local, e164])
+       .limit(1).get();
+     if (!q.empty) {
+       const u = q.docs[0];
+       return { found: true, id: u.id, ...u.data() };
+     }
+     // 2) Fallback: tra Firebase Auth — CHỈ ĐỂ CHẨN ĐOÁN, không auto-create
+     try {
+       await admin.auth().getUserByPhoneNumber(e164);
+       // Auth có nhưng Firestore không có → khách dropout giữa OTP và bước nhập tên
+       throw new HttpsError(
+         "failed-precondition",
+         "incomplete-profile: Khách đã xác thực SĐT nhưng chưa hoàn tất hồ sơ. Yêu cầu khách mở app và hoàn tất bước nhập tên.",
+       );
+     } catch (e: any) {
+       if (e.code === "auth/user-not-found")
+         throw new HttpsError(
+           "not-found",
+           "not-found: Khách chưa từng đăng ký với SĐT này. Yêu cầu khách mở app + đăng nhập 1 lần trước.",
+         );
+       throw e; // re-throw HttpsError ở trên hoặc lỗi khác
+     }
+   });
+   ```
+
+2. **Refactor** `staffCheckinByPhone` trong [functions/src/checkin.ts](../functions/src/checkin.ts) — extract helper `findUserByPhone(phone): Promise<string>` dùng chung. Nếu user không tồn tại trong Firestore → throw cùng error code `not-found` / `failed-precondition` như callable mới. Không tự ý tạo doc.
+
+3. **UI** `admin/checkin-assist/page.tsx`:
+   - Đổi từ `getDocs(query(...))` sang `await searchCustomerByPhone({ phone })` callable.
+   - Hiển thị toast/error rõ theo prefix message:
+     - `incomplete-profile: ...` → toast vàng "Khách đã xác thực SĐT nhưng chưa nhập tên. Yêu cầu khách mở app hoàn tất bước nhập tên rồi quay lại."
+     - `not-found: ...` → toast đỏ "Khách chưa từng đăng ký với SĐT này. Yêu cầu khách mở app + đăng nhập 1 lần trước."
+     - Lỗi format → toast "SĐT không hợp lệ. Nhập 10 số bắt đầu bằng 0."
+   - Normalize SĐT input client-side trước khi gọi.
+
+4. **Helper** `functions/src/utils/phone.ts` (mới) → export `normalizeVNPhone(input)`; cả `staff.ts` và `checkin.ts` import dùng chung (hiện đã có bản trong staff.ts → move).
+
+5. **Test cases**:
+   - SĐT `0900000002` trong Auth, chưa có Firestore doc → callable throw `failed-precondition` với prefix `incomplete-profile:` → UI hiển thị hướng dẫn rõ.
+   - SĐT đã đăng ký full → trả full info user → UI render bình thường.
+   - SĐT chưa từng tồn tại ở Auth → callable throw `not-found` → UI hiển thị lỗi rõ.
+   - SĐT sai format → callable throw `invalid-argument` → UI hiển thị "SĐT không hợp lệ".
+
+#### E2 — Customer check-in restructure (rủi ro: trung — UX cốt lõi đổi)
+
+**Hiện trạng** (đã đọc [src/app/(customer)/checkin/page.tsx](../src/app/(customer)/checkin/page.tsx)):
+- Logic preview tự động chọn 1 thẻ: COURSE (nếu khớp giờ) → PACKAGE → MEMBERSHIP.
+- Stepper "Số người cùng vào" + slider trẻ/người lớn vẫn hiển thị cho PACKAGE.
+- `requestCheckin` gửi `suggestedCount=group, adultsInGroup=adults`.
+
+**Mục tiêu sau E2**:
+- Hiển thị **list mọi thẻ active** dạng radio cards (Course/Pass/Package).
+- Bỏ hoàn toàn UI Stepper + slider.
+- Khi quét QR → gửi `forceKind` + `targetId` (enrollment/membership/ticketPackage ID) lên server.
+- `requestCheckin` luôn gửi `suggestedCount=1` (lễ tân chốt sau).
+
+**Implement**:
+
+1. **Frontend** `src/app/(customer)/checkin/page.tsx` rewrite:
+   - State `selectedCard: { kind: "COURSE"|"PASS"|"PACKAGE"; id: string } | null` thay cho `preview`.
+   - Render danh sách card scrollable: foreach enrollment ACTIVE → 1 card; foreach membership ACTIVE → 1 card; foreach ticketPackage ACTIVE → 1 card.
+   - Card UI:
+     - Course: emoji kiểu, "Khóa học bơi · HLV X · {attendedSessions}/15 buổi · HH {date}".
+     - Pass: "📅 Vé thời hạn · {audience} · HH {endDate}".
+     - Package: "🎟️ Vé lượt · {audience} · Còn {remaining}/{total} lượt".
+   - Radio mark trên card được chọn (border 2px brand-600 + checkmark).
+   - Empty state nếu không có thẻ ACTIVE: link `/services`.
+   - Bỏ component `Stepper` + state `group`, `adults`.
+   - Nút "Bắt đầu quét QR" disabled nếu chưa chọn thẻ.
+
+2. **Khi quét QR** — phân nhánh theo `selectedCard.kind`:
+   ```ts
+   if (selectedCard.kind === "PACKAGE") {
+     await requestCheckin({
+       qrPayload: text,
+       ticketPackageId: selectedCard.id,
+       suggestedCount: 1, // luôn = 1, lễ tân chốt số thật
+     });
+     // listen như cũ
+   } else {
+     // COURSE/PASS
+     const r = await checkinByQr({
+       qrPayload: text,
+       forceKind: selectedCard.kind === "COURSE" ? "COURSE" : "MEMBERSHIP",
+       targetId: selectedCard.id, // mới — backend dùng để skip search
+       beneficiaryId: who === "self" ? undefined : who,
+     });
+   }
+   ```
+
+3. **Backend** [functions/src/checkin.ts](../functions/src/checkin.ts) — mở rộng `checkinByQr`:
+   - Nhận thêm `forceKind?: "COURSE"|"PASS"|"PACKAGE"` + `targetId?: string`.
+   - Nếu cả 2 set → load đúng doc đó, skip auto-resolve. Validate `userId` khớp, status ACTIVE, các điều kiện cụ thể của loại (slot khớp giờ, endDate, remaining).
+   - Nếu chỉ `forceKind` set không có `targetId` → vẫn dùng auto-resolve (như hiện tại với `forceKind`).
+   - Backward compat: không truyền gì → behavior cũ.
+
+4. **Backend** `requestCheckin`: param không thay đổi nhưng client luôn gửi `suggestedCount=1`. Server vẫn validate. UI hiển thị "Đề xuất trừ: 1" trong pending state.
+
+5. **Lưu ý**: nếu user **không có thẻ ACTIVE** nào → vẫn show empty state + link mua. Không hiển thị tab thẻ rỗng.
+
+#### E3 — Audio beep + highlight Hàng đợi (rủi ro: thấp)
+
+**Hiện trạng**: `<CheckinQueue />` đã có UI nhập count + Duyệt/Từ chối hoàn chỉnh. Chỉ thiếu audio + visual highlight cho request mới.
+
+**Implement**:
+
+1. **Audio**: dùng Web Audio API generate tone đơn giản (không cần asset):
+   ```ts
+   function beep() {
+     const ctx = new AudioContext();
+     const osc = ctx.createOscillator();
+     const gain = ctx.createGain();
+     osc.connect(gain); gain.connect(ctx.destination);
+     osc.frequency.value = 880; // A5
+     gain.gain.setValueAtTime(0.15, ctx.currentTime);
+     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+     osc.start(); osc.stop(ctx.currentTime + 0.3);
+   }
+   ```
+2. **Trigger**: trong `onSnapshot` của `CheckinQueue`, so sánh `items.length` mới với cũ (useRef). Nếu tăng → `beep()` + visual flash (CSS class `animate-flash` 0.5s) trên card mới nhất.
+3. **Mute toggle**: thêm icon nhỏ ở header section "Hàng đợi" cho lễ tân tắt tiếng (lưu vào localStorage).
+4. **Lưu ý**: browser policy yêu cầu user interaction trước khi `AudioContext` chạy được. Vì lễ tân chắc chắn đã click gì đó trong session → ok. Fallback nếu fail: silent.
+
+#### E4 — Màn HLV hoàn thiện (rủi ro: cao — feature mới + nhiều UI)
+
+**Hiện trạng**:
+- `coach/page.tsx` (Hôm nay): lịch dạy sáng/chiều + count HV/ca. Không có nút "Báo nghỉ".
+- `coach/students/page.tsx` (HV): list HV + nút Zalo. Không có ghi chú/highlight vắng.
+
+**Backend mới** — tạo file [functions/src/coach.ts](../functions/src/coach.ts):
+
+```ts
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
+
+const REGION = "asia-southeast1";
+const db = () => admin.firestore();
+
+// E4.1 — HLV thêm ghi chú cho HV
+// data: { enrollmentId: string, text: string (1..500) }
+export const addCoachNote = onCall({ region: REGION }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
+  if (req.auth.token.role !== "COACH" && req.auth.token.role !== "OWNER")
+    throw new HttpsError("permission-denied", "Chỉ HLV được ghi chú");
+  const { enrollmentId, text } = req.data as { enrollmentId: string; text: string };
+  if (!text?.trim()) throw new HttpsError("invalid-argument", "Ghi chú không được trống");
+  if (text.length > 500) throw new HttpsError("invalid-argument", "Ghi chú tối đa 500 ký tự");
+
+  const eRef = db().doc(`enrollments/${enrollmentId}`);
+  const e = await eRef.get();
+  if (!e.exists) throw new HttpsError("not-found", "Khóa học không tồn tại");
+  // Coach đứng lớp = enrollment.coachId. Cần map req.auth.uid → coachId.
+  // Coach có /coaches/{cid}.userId === req.auth.uid
+  if (req.auth.token.role === "COACH") {
+    const coachQ = await db().collection("coaches").where("userId", "==", req.auth.uid).limit(1).get();
+    if (coachQ.empty) throw new HttpsError("permission-denied", "Tài khoản chưa gắn HLV");
+    if (coachQ.docs[0].id !== e.data()?.coachId)
+      throw new HttpsError("permission-denied", "Không phải HLV đứng lớp này");
+  }
+
+  await eRef.update({
+    coachNotes: admin.firestore.FieldValue.arrayUnion({
+      text: text.trim(),
+      at: admin.firestore.Timestamp.now(),
+    }),
+  });
+  return { ok: true };
+});
+
+// E4.2 — HLV báo nghỉ ca
+// data: { coachId: string, date: "YYYY-MM-DD", startHour: number, reason?: string }
+export const reportCoachAbsence = onCall({ region: REGION }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
+  if (req.auth.token.role !== "COACH" && req.auth.token.role !== "OWNER")
+    throw new HttpsError("permission-denied", "Chỉ HLV được báo nghỉ");
+  const { coachId, date, startHour, reason } = req.data as any;
+
+  // Validate coach mapping (như addCoachNote)
+  if (req.auth.token.role === "COACH") {
+    const coachQ = await db().collection("coaches").where("userId", "==", req.auth.uid).limit(1).get();
+    if (coachQ.empty || coachQ.docs[0].id !== coachId)
+      throw new HttpsError("permission-denied", "Không phải HLV này");
+  }
+
+  const docKey = `${date}_${startHour}`;
+  const absenceRef = db().doc(`coaches/${coachId}/absences/${docKey}`);
+  const existing = await absenceRef.get();
+  if (existing.exists) throw new HttpsError("already-exists", "Đã báo nghỉ ca này rồi");
+
+  // Tìm HV của ca đó
+  const slotId = `${coachId}_${new Date(date).getDay()}_${startHour}`;
+  const enrolls = await db().collection("enrollments")
+    .where("coachId", "==", coachId)
+    .where("slotId", "==", slotId)
+    .where("status", "==", "ACTIVE")
+    .get();
+
+  // Tạo doc absence
+  await absenceRef.set({
+    coachId, date, startHour,
+    reason: reason ?? "",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdBy: req.auth.uid,
+    notifiedCount: enrolls.size,
+  });
+
+  // Push HV
+  const coach = await db().doc(`coaches/${coachId}`).get();
+  const coachName = coach.data()?.fullName ?? "HLV";
+  const batch = db().batch();
+  const tokensToSend: string[] = [];
+  for (const e of enrolls.docs) {
+    const ed = e.data();
+    const targetUid = ed.parentId ?? ed.studentId;
+    const notifRef = db().collection("users").doc(targetUid).collection("notifications").doc();
+    batch.set(notifRef, {
+      title: `${coachName} báo nghỉ ngày ${date}`,
+      body: `Ca ${startHour}h–${startHour + 1}h ${reason ? "· " + reason : ""}. Vui lòng đợi thông báo lịch bù.`,
+      type: "COACH_OFF",
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    const u = await db().doc(`users/${targetUid}`).get();
+    tokensToSend.push(...(u.data()?.fcmTokens ?? []));
+  }
+  await batch.commit();
+  if (tokensToSend.length)
+    await admin.messaging().sendEachForMulticast({
+      tokens: tokensToSend,
+      notification: {
+        title: `${coachName} báo nghỉ ngày ${date}`,
+        body: `Ca ${startHour}h–${startHour + 1}h`,
+      },
+    });
+
+  return { ok: true, notified: enrolls.size };
+});
+```
+
+Export trong [functions/src/index.ts](../functions/src/index.ts).
+
+**Frontend** `src/lib/callable.ts` — thêm 2 callable wrapper:
+```ts
+export const addCoachNote = call<{ enrollmentId: string; text: string }, { ok: boolean }>("addCoachNote");
+export const reportCoachAbsence = call<
+  { coachId: string; date: string; startHour: number; reason?: string },
+  { ok: boolean; notified: number }
+>("reportCoachAbsence");
+```
+
+**UI Hôm nay** `src/app/(coach)/coach/page.tsx`:
+- Thêm nút "Báo nghỉ" trên mỗi card slot.
+- Click → mở dialog xác nhận: "Báo nghỉ ca {hour}h hôm nay? {N} HV sẽ nhận thông báo." + optional textarea "Lý do (không bắt buộc)".
+- Confirm → gọi `reportCoachAbsence({ coachId, date: today, startHour, reason })` → toast success "Đã báo nghỉ. {N} HV đã nhận thông báo."
+- Hiển thị badge "Đã báo nghỉ" trên slot đã có absence doc (load `/coaches/{coachId}/absences` ngày hôm nay).
+
+**UI HV** `src/app/(coach)/coach/students/page.tsx`:
+- Mỗi row HV → tap mở **bottom sheet** chi tiết HV:
+  - Header: avatar + tên + ca + progress {attended}/15 + chip trạng thái.
+  - Thông tin: kiểu bơi, lịch học (T3-T5-T7 hoặc T4-T6-CN), HH `expiryDate`, nút Zalo lớn.
+  - **Section "Lịch sử buổi học"**: list 10 attendances gần nhất (date + present + source). Buổi vắng = chip đỏ "Vắng".
+  - **Section "Ghi chú HV"**: list `coachNotes` cũ (text + thời gian, sort `at desc`). Textarea + nút "Thêm ghi chú" → `addCoachNote` callable.
+- **Highlight HV vắng ≥3 buổi liên tiếp** (INV-19):
+  - Hàm `countConsecutiveAbsences(attendances: Attendance[]): number` — load 5 attendances gần nhất (sort `date desc`), đếm số buổi liên tiếp `present === false`. Nếu ≥3 → badge đỏ trên row.
+  - Hoặc tính từ thiếu attendance doc khi đến giờ học đáng lẽ phải có (so với `slot.weekday + slot.startHour` từ enrollment.startDate đến nay). v1: chỉ dùng attendance doc với `present:false` để đơn giản.
+- **Performance**: với 30 HV, mỗi HV load 5 attendances → 150 reads ban đầu. Chấp nhận v1; nếu chậm → denormalize `lastAbsenceStreak` vào enrollment doc qua cron daily.
+
+**Firestore rules** — thêm:
+```javascript
+match /coaches/{coachId}/absences/{date} {
+  allow read: if isSignedIn(); // HV/lễ tân/Owner xem được
+  allow write: if false; // qua callable
+}
+```
+
+**Index cần thêm** (firestore.indexes.json):
+```json
+{
+  "collectionGroup": "attendances",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "date", "order": "DESCENDING" }
+  ]
+}
+```
+(Có thể không cần — `attendances` subcollection query bằng `orderBy("date","desc").limit(5)` thường tự work với composite index single field).
+
+### 19.3 Thứ tự deploy đề xuất
+
+1. **PR #1 — Backend foundations**: E1 (callable mới `searchCustomerByPhone` + refactor `staffCheckinByPhone`) + E4 (2 callables mới `addCoachNote`, `reportCoachAbsence`) + rules update. Deploy functions + rules trước.
+2. **PR #2 — Customer check-in restructure**: E2 (frontend + backend `checkinByQr` accept `targetId`). UAT kỹ với 3 case (course/pass/package).
+3. **PR #3 — Coach UI**: E4 frontend (bottom sheet HV + ghi chú + báo nghỉ + highlight vắng).
+4. **PR #4 — Polish**: E3 (audio beep) + E1 UI update + bug fixes tổng hợp.
+
+### 19.4 Testing checklist v2.4
+
+- [ ] **E1**: 
+  - Tạo test number `0900000002` ở Firebase Console, chưa từng login app → vào `/admin/checkin-assist` tra `0900000002` → tìm thấy + toast cảnh báo "Khách chưa hoàn tất hồ sơ" + doc placeholder được tạo (kiểm bằng Firestore Console).
+  - Tra SĐT đã đăng ký đầy đủ → hiển thị tên + thẻ.
+  - Tra SĐT chưa tồn tại ở Auth → toast lỗi rõ ràng.
+  - Tra SĐT format sai (9 số, có chữ) → toast "SĐT không hợp lệ".
+
+- [ ] **E2**:
+  - Customer có 1 enrollment ACTIVE + 1 ticketPackage ACTIVE + 1 membership ACTIVE → vào `/checkin` thấy đủ 3 card.
+  - Chọn card khóa học → quét QR (test với QR từ `/admin/qr-gate`) → server xử lý đúng loại COURSE → attendance được ghi.
+  - Chọn card vé lượt → quét → server tạo `/checkinRequests` với `suggestedCount=1`, không phụ thuộc input khách → lễ tân duyệt với count = 3 → trừ 3 lượt.
+  - Chọn card vé thời hạn → quét → ghi `/checkins` trực tiếp.
+  - KHÔNG còn UI "Số người cùng vào" + slider trẻ/người lớn trên page customer.
+
+- [ ] **E3**:
+  - Mở `/admin` ở thiết bị lễ tân (giữ tab active) → ở thiết bị khác (customer) quét QR vé lượt → màn lễ tân **kêu beep** + card mới flash sáng 0.5s.
+  - Click icon mute → tắt tiếng → quét tiếp → không kêu nhưng vẫn flash.
+  - Reload page → mute state vẫn được giữ (localStorage).
+
+- [ ] **E4**:
+  - **Ghi chú HV**: vào `/coach/students` → tap 1 HV → bottom sheet mở → gõ "HS tiến bộ tốt, đã biết thở" → submit → note xuất hiện trong list. Reload → vẫn còn.
+  - **Báo nghỉ**: vào `/coach` → bấm "Báo nghỉ" ở ca 14h → confirm → toast success. Mở app khách của 1 HV ca đó → thấy notification "HLV X báo nghỉ ngày...". Trên `/coach` thấy badge "Đã báo nghỉ" ở ca đó.
+  - **Highlight vắng**: tạo enrollment + ghi 3 attendance liên tiếp với `present:false` → vào `/coach/students` → HV đó có badge đỏ "Vắng 3 buổi" trên row.
+
+- [ ] **Regression**:
+  - Vé thời hạn / khóa học quét QR vẫn check-in trực tiếp.
+  - Vé lượt quét QR vẫn vào hàng đợi và lễ tân duyệt được.
+  - `/admin/orders`, `/admin/customers` không bị ảnh hưởng.
+  - Đăng nhập 3 role (OWNER/RECEPTIONIST/COACH) không lệch.
+
+### 19.5 Rủi ro & rollback
+
+| Task | Rủi ro | Rollback |
+|---|---|---|
+| E1 | Khách chưa hoàn tất hồ sơ vẫn bị chặn check-in hộ → lễ tân phải bảo khách mở app ngay. Trade-off để tránh tạo account ma. | Trong UI hiển thị link copy SĐT cho lễ tân share với khách qua Zalo/SMS. Nếu thật sự cần check-in gấp → Owner có thể chạy script `seed/setRole.ts` tạo doc thủ công. |
+| E2 | Khách hàng cũ quen UI "Số người cùng vào" có thể bối rối khi mất tính năng. | Tooltip "Lễ tân sẽ chốt số lượt khi xác nhận" hiển thị trên card vé lượt. |
+| E3 | Browser block AudioContext nếu chưa có user interaction → beep silent. | Fallback chỉ visual flash; thêm note "Bật âm thanh" lần đầu vào page. |
+| E4 | `addCoachNote` cho phép append vô hạn → doc enrollment phình to vượt 1MB (sau ~2000 notes). | Cap UI 100 notes hiển thị; server reject nếu `coachNotes.length >= 200` (HLV ko ghi nhiều thế trong 90 ngày khóa). |
+| E4 | `reportCoachAbsence` push N HV (max 20 — INV-3) → fan-out OK nhưng nếu HV không có fcmToken → silent. | Hiển thị `notified` count trong response để HLV biết. |
+
+### 19.6 v2.4.1 hotfix — 4 sửa F1-F4 (2026-06-23 ngay sau v2.4)
+
+Owner UAT bản v2.4 trên local + báo cáo 4 vấn đề ngay sau khi deploy. Các fix:
+
+| # | Mã | Vấn đề | Cách fix | Files |
+|---|---|---|---|---|
+| F1 | Vé thời hạn không nên có ở flow check-in | Bỏ MEMBERSHIP khỏi bộ chọn thẻ, thay bằng banner "Xem thẻ" link `/cards`. Ẩn cả QR scanner + nút "Bắt đầu quét" nếu user chỉ có membership. | [src/app/(customer)/checkin/page.tsx](../src/app/(customer)/checkin/page.tsx) |
+| F2 | "Khách đã xác thực SĐT nhưng chưa hoàn tất hồ sơ" — lễ tân bị chặn | Đảo quyết định cũ: server AUTO-CREATE doc placeholder (`role:"CUSTOMER"`, `fullName:""`, `_synced:true`, `createdAt:now`) khi Auth có user nhưng Firestore không. Audit `AUTO_CREATE_USER_FROM_AUTH`. Áp dụng cho cả `searchCustomerByPhone` (staff.ts) và `findUserUidByPhone` (checkin.ts). | [functions/src/staff.ts](../functions/src/staff.ts), [functions/src/checkin.ts](../functions/src/checkin.ts) |
+| F3 | Test number trong Firebase Console không hiện ở `/admin/customers` (vì chưa từng login app) | Callable mới `syncAllAuthUsersToFirestore` (Owner-only) — lặp page 1000 user/lần qua `admin.auth().listUsers()`, tạo doc placeholder cho user có phoneNumber mà chưa có Firestore doc. Audit log `SYNC_AUTH_USERS`. UI nút "Đồng bộ Auth" ở header `/admin/customers` (chỉ Owner). | [functions/src/staff.ts](../functions/src/staff.ts), [src/app/(staff)/admin/customers/page.tsx](../src/app/(staff)/admin/customers/page.tsx), [src/lib/callable.ts](../src/lib/callable.ts) |
+| F4 | Lỗi "Lưu thất bại: internal" khi HLV thêm ghi chú | Không phải bug code — callable `addCoachNote` mới (v2.4) chưa được deploy lên server. Lệnh khắc phục: `firebase deploy --only functions,firestore:rules`. Ghi rõ trong README + changelog. | — |
+
+**Lệnh deploy chuẩn sau khi pull v2.4.1**:
+```powershell
+# Refresh PATH nếu Node mới cài
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+# Build functions
+cd functions
+npm run build
+cd ..
+
+# Deploy functions + rules
+firebase deploy --only functions,firestore:rules
+
+# (Optional) Deploy hosting nếu test trên prod
+firebase deploy --only hosting
+```
+
+**Sau khi deploy**:
+1. Owner mở `/admin/customers` → bấm "Đồng bộ Auth" → confirm số khách trong Auth được tạo doc.
+2. Test điểm danh hộ với `0900000002` → tìm thấy + toast "Đã tạo hồ sơ tạm".
+3. HLV mở `/coach/students` → tap HV → gõ ghi chú → submit → toast "Đã lưu ghi chú".
+
+### 19.7 Files mới sẽ tạo / sửa
+
+```
+Mới (v2.4):
+  functions/src/coach.ts                                   (E4 callables)
+  src/lib/coachUtils.ts                                    (E4 countConsecutiveAbsences)
+
+Sửa (v2.4 + v2.4.1):
+  functions/src/checkin.ts                                 (E1 refactor + E2 forceKind/targetId + F2 auto-create)
+  functions/src/staff.ts                                   (E1 searchCustomerByPhone + F2 auto-create + F3 syncAllAuthUsersToFirestore)
+  functions/src/helpers.ts                                 (export normalizeVNPhone + phoneVariants)
+  functions/src/index.ts                                   (export 4 callables mới)
+  firestore/firestore.rules                                (E4 /coaches/{id}/absences rule)
+  src/app/(customer)/checkin/page.tsx                      (E2 rewrite UI + F1 bỏ membership)
+  src/app/(staff)/admin/checkin-assist/page.tsx            (E1 dùng callable mới + F2 bỏ error incomplete-profile)
+  src/app/(staff)/admin/customers/page.tsx                 (F3 nút Đồng bộ Auth)
+  src/app/(coach)/coach/page.tsx                           (E4 nút báo nghỉ + badge)
+  src/app/(coach)/coach/students/page.tsx                  (E4 bottom sheet + highlight)
+  src/components/CheckinQueue.tsx                          (E3 audio beep + flash + mute)
+  src/lib/callable.ts                                      (5 callable wrappers mới)
+  src/types/index.ts                                       (CoachAbsence interface)
+```
+
+---
+
+## 20. v2.5 — UAT round 6 (2026-06-24)
+
+6 chỉnh sửa từ feedback Owner. Mã tham chiếu CLAUDE.md §12.quinquies.
+
+### 20.1 G1 — Fix `/admin/customers` chỉ hiện 2/5 số test
+
+**Root cause**: query `query(collection(db,"users"), where("role","==","CUSTOMER"), orderBy("createdAt","desc"))` — Firestore mặc định **bỏ qua doc thiếu field `orderBy`**. Số `0857906079` được tạo bằng `setDoc(merge:true)` ở luồng legacy không gắn `createdAt`, nên không hiển thị dù vẫn có `role:"CUSTOMER"`.
+
+**Fix** [src/app/(staff)/admin/customers/page.tsx]:
+- Bỏ `orderBy`, bỏ luôn `where("role"==...)` (đã làm từ v2.3 D8 — list `/users` rồi filter client-side, an toàn hơn với legacy doc thiếu role).
+- Query mới: `query(collection(db,"users"), limit(1000))`.
+- Sort client-side: `[...users].sort((a,b) => (toDate(b.createdAt)?.getTime() ?? 0) - (toDate(a.createdAt)?.getTime() ?? 0))` — doc thiếu `createdAt` được đẩy cuối.
+
+### 20.2 G2 — CRUD khách hàng
+
+3 callable mới ở [functions/src/staff.ts]:
+
+**`createCustomerByPhone({phone, fullName?})`** — Owner-only:
+1. `phoneVariants(phone)` → `{raw, local, e164}`.
+2. `getUserByPhoneNumber(e164)` — nếu Auth có thì lấy `uid` đó, nếu không thì `createUser({phoneNumber: e164, displayName: fullName})`.
+3. Check Firestore doc `users/{uid}` đã có chưa:
+   - Có + role staff/coach → throw `failed-precondition` ("Không thể chuyển staff thành customer").
+   - Có + CUSTOMER → trả `alreadyExists:true` (idempotent).
+   - Chưa có → `set({phone:e164, fullName, role:"CUSTOMER", fcmTokens:[], _createdByOwner:true, createdAt: serverTimestamp()})`.
+4. Audit log `CREATE_CUSTOMER` { uid, phone, by }.
+
+**`updateCustomerName({uid, fullName})`** — Owner + Lễ tân:
+1. Validate `fullName.trim().length in [1, 60]` else `invalid-argument`.
+2. Read doc → if not exists throw `not-found`.
+3. Update + audit `UPDATE_CUSTOMER_NAME` { uid, from: old, to: new, by }.
+
+**`deleteCustomer({uid})`** — Owner-only:
+1. Block `uid === req.auth.uid` ("Không thể tự xoá tài khoản Owner").
+2. Read doc → if role in [OWNER, RECEPTIONIST, COACH] → throw `failed-precondition` ("Khách hàng này có role staff/coach — gỡ quyền trước").
+3. Audit log `DELETE_CUSTOMER` { uid, phone, fullName, by } **trước** khi xoá (giữ snapshot).
+4. `db().doc("users/${uid}").delete()`.
+5. `admin.auth().deleteUser(uid)` (try/catch — nếu Auth user đã bị xoá ngoài thì log warning, không fail).
+
+**UI** [src/app/(staff)/admin/customers/page.tsx]:
+- Nút "+ Thêm khách" (Owner only) ở header → `CreateCustomerModal` (2 input: phone + fullName).
+- Mỗi row có icon Pencil (staff) → `EditNameModal`.
+- Mỗi row có icon Trash (Owner) → `ConfirmDeleteModal` (cảnh báo "Sẽ xoá cả Auth user, không phục hồi được").
+- Generic `Modal` wrapper component (esc + click-outside đóng).
+
+**Callable wrappers** [src/lib/callable.ts]:
+```ts
+export const createCustomerByPhone = call<{phone:string, fullName?:string}, {ok:boolean, uid:string, alreadyExists:boolean}>("createCustomerByPhone");
+export const updateCustomerName = call<{uid:string, fullName:string}, {ok:boolean}>("updateCustomerName");
+export const deleteCustomer = call<{uid:string}, {ok:boolean}>("deleteCustomer");
+```
+
+### 20.3 G2b — Khoá khách hàng tự đổi tên (INV-20)
+
+**Firestore rules** [firestore/firestore.rules]:
+```
+match /users/{uid} {
+  allow update: if isOwner()
+    || (self(uid) && (
+      !('fullName' in request.resource.data)
+      || resource.data.fullName == null
+      || resource.data.fullName == ''
+      || request.resource.data.fullName == resource.data.fullName
+    ));
+}
+```
+Owner bypass mọi rule (qua callable dùng admin SDK). Self update chỉ pass khi: không touch `fullName`, HOẶC `fullName` cũ rỗng (lần đầu setup), HOẶC `fullName` mới giống cũ.
+
+**UI** [src/app/(customer)/profile/page.tsx]:
+```ts
+const canEditName = !profile?.fullName?.trim();
+```
+- Nút Pencil chỉ render khi `canEditName === true`.
+- Khi `!canEditName` → banner xám: "ℹ️ Để đổi tên trên thẻ, vui lòng liên hệ lễ tân tại hồ bơi."
+
+### 20.4 G3 — Sửa bảng CrossTable + bar chart
+
+**Bug bảng** [src/components/CrossTable.tsx]:
+- Hàng `SWIM_COURSE` cũ render: `<td colSpan={2}>(giá phẳng)</td> <td><CellView c={matrix.SWIM_COURSE.ALL}/></td>` → CellView ALL rơi vào cột "Trẻ <1.4M" thay vì TỔNG.
+- Hàng TỔNG cũ: `<td colSpan={3}>` — nhưng số cột audience+total = 4 (khi `hideTotal=false`), nên "X đơn · Y₫" lệch trái.
+
+**Fix**:
+```tsx
+{p === "SWIM_COURSE" ? (
+  <td colSpan={audiences.length} className="p-3 text-center text-slate-500">
+    <span className="text-[11px] italic text-slate-400">(giá phẳng, không chia đối tượng)</span>
+    {hideTotal && <span className="ml-2"><CellView c={matrix.SWIM_COURSE.ALL} /></span>}
+  </td>
+) : (
+  audiences.map(a => <td><CellView c={matrix[p][a]} /></td>)
+)}
+```
+- Owner (`hideTotal=false`): cột TỔNG bên phải đã hiển thị `rowCount · rowAmount`, không cần lặp ALL.
+- Lễ tân (`hideTotal=true`): inline CellView ALL trong ô gộp (vẫn hiển thị `1 · 1.800.000₫`).
+- Hàng TỔNG: `colSpan={audiences.length + 1}` = 4.
+
+**Bug bar chart** [src/app/(staff)/admin/reports/page.tsx + src/app/(staff)/admin/page.tsx]:
+- Layout cũ:
+  ```tsx
+  <div className="flex h-40 items-end">
+    <div className="flex flex-1 flex-col items-center">  // ← column wrapper, no height
+      <div style={{ height: `${pct}%` }} />               // ← % không có anchor
+      <div>{label}</div>
+    </div>
+  </div>
+  ```
+- Cột `flex-col` cao = bar + label (content-based), bar `height: %` của cột → cyclic → bar collapse.
+
+**Fix** (tách hai hàng):
+```tsx
+<div className="flex h-44 flex-col gap-2">
+  <div className="flex flex-1 items-end gap-1">
+    {chart.map(c => (
+      <div className="flex h-full flex-1 items-end" title={...}>
+        <div className="w-full rounded-t bg-gradient-to-t from-brand-600 to-brand-400"
+             style={{ height: `${Math.max(2, (c.value/maxChart)*100)}%` }} />
+      </div>
+    ))}
+  </div>
+  <div className="flex gap-1">
+    {chart.map(c => <div className="flex-1 text-center text-[10px]">{c.label}</div>)}
+  </div>
+</div>
+```
+- Hàng bar có `flex-1` (chiếm hết height còn lại sau hàng label), cột `h-full` → `%` resolve được.
+- `min-height: 2px` để cột zero vẫn nhìn thấy chỗ đặt.
+
+Fix luôn `HourBars` ở [src/app/(staff)/admin/page.tsx] — pattern lỗi giống hệt.
+
+### 20.5 G4 — Autocomplete SĐT ở `/admin/checkin-assist`
+
+**[src/app/(staff)/admin/checkin-assist/page.tsx]**:
+```ts
+type PhoneEntry = { uid: string; local: string; raw: string; fullName: string };
+const [allPhones, setAllPhones] = useState<PhoneEntry[]>([]);
+
+useEffect(() => {
+  const q = query(collection(db, "users"), limit(2000));
+  return onSnapshot(q, snap => {
+    setAllPhones(
+      snap.docs
+        .map(d => ({ uid: d.id, ...d.data() } as any))
+        .filter(u => !u.role || u.role === "CUSTOMER" || u.role === "PARENT")
+        .map(u => ({
+          uid: u.uid,
+          local: normalizeToLocal(u.phone),
+          raw: u.phone,
+          fullName: u.fullName ?? "",
+        }))
+    );
+  });
+}, []);
+
+const suggestions = useMemo(() => {
+  const digits = phoneInput.replace(/\D/g, "");
+  if (digits.length < 3) return [];
+  return allPhones
+    .filter(p => p.local.startsWith(digits) || p.raw.includes(digits))
+    .slice(0, 8);
+}, [phoneInput, allPhones]);
+```
+- Dropdown render khi `suggestions.length > 0` + `focused`.
+- Click suggestion → `setPhoneInput(p.local)` + auto trigger search.
+- Click-outside qua `suggestBoxRef` + `useEffect` listener `mousedown`.
+
+Scale ~2-3k user (per PRD) → load all client-side OK. Nếu scale lên 10k+ thì chuyển sang callable `searchCustomerByPhonePrefix({prefix})`.
+
+### 20.6 G5 — Bỏ check giờ ca khi điểm danh khoá học (INV-21)
+
+**[functions/src/checkin.ts]** — `processCheckin`:
+
+Trước:
+```ts
+if (hour < s.startHour || hour >= s.endHour)
+  throw new HttpsError("failed-precondition", `Chưa đến giờ học (${s.startHour}h–${s.endHour}h).`);
+```
+
+Sau (xoá hẳn 2 chỗ — nhánh `forceKind:"COURSE"+targetId` và nhánh auto-search):
+```ts
+// v2.5: bỏ check giờ — cho phép điểm danh khoá học bất kỳ thời điểm nào trong ngày dạy
+```
+
+Vẫn giữ:
+- `s.weekday !== weekday` → block (sai ngày dạy).
+- `e.status !== "ACTIVE"` → block.
+- `e.expiryDate < now` → block.
+- `attendances/{dateKey}` đã tồn tại → block (chống điểm danh kép trong ngày).
+
+Cũng xoá `const hour = now.getHours();` ở dòng 130 vì TypeScript strict báo unused-var.
+
+### 20.7 Lệnh deploy
+
+```powershell
+cd functions; npm run build
+firebase deploy --only functions:createCustomerByPhone,functions:updateCustomerName,functions:deleteCustomer,functions:checkinByQr,functions:staffCheckinByPhone,firestore:rules
+```
+
+Hoặc deploy all cho an toàn:
+```powershell
+firebase deploy --only functions,firestore:rules
+```
+
+### 20.8 Files đã chạm v2.5
+
+```
+functions/src/staff.ts                        (G2: 3 callable CRUD)
+functions/src/index.ts                        (export 3 callable mới)
+functions/src/checkin.ts                      (G5: bỏ check hour)
+firestore/firestore.rules                     (G2b: rule update users.fullName)
+src/lib/callable.ts                           (G2: 3 wrapper mới)
+src/app/(staff)/admin/customers/page.tsx      (G1+G2: bỏ orderBy, CRUD modals)
+src/app/(staff)/admin/checkin-assist/page.tsx (G4: autocomplete)
+src/app/(staff)/admin/page.tsx                (G3: HourBars fix)
+src/app/(staff)/admin/reports/page.tsx        (G3: bar chart fix)
+src/app/(customer)/profile/page.tsx           (G2b: hide Pencil + banner)
+src/components/CrossTable.tsx                 (G3: colSpan SWIM_COURSE + TỔNG)
+```
 
 ---
 

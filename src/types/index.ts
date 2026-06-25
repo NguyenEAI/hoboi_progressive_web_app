@@ -65,9 +65,10 @@ export interface Child {
   id: string;
   parentId: string;
   fullName: string;
-  dob: TS;
-  heightCm: number;
-  audience: Audience;
+  dob?: TS;
+  // v2.3: chiều cao optional — audience được chọn lúc mua thẻ (INV-16)
+  heightCm?: number;
+  audience?: Audience;
 }
 
 // ---------- COACHES ----------
@@ -215,6 +216,19 @@ export interface Attendance {
   at: TS;
 }
 
+// v2.4 (E4) — HLV báo nghỉ ca. Doc id = `${date}_${startHour}` trong subcollection
+// /coaches/{coachId}/absences/. Tồn tại = ca nghỉ; không có status, không vòng đời.
+export interface CoachAbsence {
+  id: string; // = `${date}_${startHour}`
+  coachId: string;
+  date: string; // YYYY-MM-DD
+  startHour: number; // 7..19
+  reason?: string;
+  notifiedCount: number; // số HV đã push notification
+  createdAt: TS;
+  createdBy: string; // uid HLV (hoặc Owner nếu ủy quyền)
+}
+
 // ---------- CHECK-IN & QR ----------
 export interface CheckIn {
   id: string;
@@ -235,6 +249,31 @@ export interface QrToken {
   issuedAt: TS;
   expiresAt: TS; // +30s
   used: boolean;
+}
+
+// v2.3 (INV-15): khách quét QR vé lượt → tạo request chờ lễ tân duyệt
+export type CheckinRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export interface CheckinRequest {
+  id: string;
+  userId: string; // khách quét QR
+  userName: string;
+  userPhone: string;
+  beneficiaryKind: "USER" | "CHILD";
+  beneficiaryId: string;
+  beneficiaryName: string;
+  ticketPackageId: string;
+  ticketRemaining: number; // snapshot tại thời điểm quét
+  suggestedCount: number; // khách bấm chọn
+  adultsInGroup?: number; // optional info
+  approvedCount?: number; // lễ tân chốt
+  status: CheckinRequestStatus;
+  qrTokenId: string;
+  createdAt: TS;
+  resolvedAt?: TS;
+  resolvedBy?: string; // uid lễ tân hoặc uid khách (CANCELLED)
+  rejectReason?: string;
+  checkinId?: string;
 }
 
 // ---------- NOTIFICATIONS / AUDIT / STATS ----------

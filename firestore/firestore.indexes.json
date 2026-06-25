@@ -36,6 +36,14 @@
     { "collectionGroup": "checkins", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "userId", "order": "ASCENDING" },
       { "fieldPath": "at", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "checkinRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "enrollments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "parentId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }
     ]}
   ],
   "fieldOverrides": []

@@ -8,7 +8,8 @@ import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import { SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
 import { formatDate, daysUntil, toDate } from "@/lib/utils";
 import type { Enrollment, CoachSlot, Coach, Attendance } from "@/types";
-import { ArrowLeft, MessageCircle, Calendar, Clock, User2, GraduationCap } from "lucide-react";
+import { MessageCircle, Calendar, Clock, User2, GraduationCap } from "lucide-react";
+import { BackButton } from "@/components/BackButton";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "bg-emerald-100 text-emerald-700",
@@ -79,10 +80,8 @@ export default function MyCourseDetailPage() {
 
   return (
     <main className="mx-auto max-w-md pb-24">
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white/95 px-4 py-3 backdrop-blur">
-        <button onClick={() => router.back()} aria-label="Quay lại" className="-ml-1 rounded-lg p-1.5 hover:bg-slate-100">
-          <ArrowLeft className="size-5 text-slate-700" />
-        </button>
+      <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white/95 px-2 py-2 backdrop-blur">
+        <BackButton fallback="/my-courses" />
         <h1 className="text-base font-bold text-brand-800">Chi tiết khóa học</h1>
       </header>
 

@@ -77,13 +77,19 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
     snapshot.packageSize = size;
   } else if (productType === "SWIM_COURSE") {
     const style = d.swimStyle as SwimStyle;
-    // v2.1: chấp nhận 2 dạng payload
-    //   (cũ) { coachId, slotId, startDate }
+    // v2.1: chấp nhận 2 dạng payload (v2.3 client gửi cả 2 để BC)
     //   (mới) { coachId, startHour, weekOffset? } — server tự chọn slot+startDate
+    //   (cũ) { coachId, slotId, startDate }
     const hasNew = !!d.coachId && typeof d.startHour === "number";
     const hasLegacy = !!d.coachId && !!d.slotId && !!d.startDate;
+    // v2.3 D4: error message rõ ràng từng field thay vì gộp chung
+    if (!d.coachId) throw new HttpsError("invalid-argument", "Thiếu HLV (coachId)");
+    if (!style) throw new HttpsError("invalid-argument", "Thiếu kiểu bơi (swimStyle)");
     if (!hasNew && !hasLegacy)
-      throw new HttpsError("invalid-argument", "Thiếu HLV/khung giờ");
+      throw new HttpsError(
+        "invalid-argument",
+        "Thiếu khung giờ. Cần gửi startHour (mới) hoặc slotId+startDate (cũ).",
+      );
     amountVND = prices.course;
     snapshot.name = styleLabel(style);
     snapshot.swimStyle = style;

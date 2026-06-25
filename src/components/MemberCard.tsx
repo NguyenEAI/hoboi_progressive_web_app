@@ -32,57 +32,57 @@ export function MembershipCard({ m, holderName }: { m: Membership; holderName: s
   const isExpiring = days <= 7;
 
   return (
-    <div className="relative overflow-hidden rounded-2.5xl shadow-elevated">
+    <div className="relative overflow-hidden rounded-3xl shadow-float border border-white/10">
       {/* Layered background */}
       <div className="absolute inset-0 hero-mesh" />
       <div className="absolute inset-0 holo-shine" />
       <div
-        className="absolute inset-x-0 bottom-0 h-16 text-brand-700/90"
+        className="absolute inset-x-0 bottom-0 h-16 text-brand-800/60"
         aria-hidden
       >
         <WavePattern className="absolute inset-x-0 bottom-0 h-full w-full" />
       </div>
 
-      <div className="relative px-5 py-5 text-white">
-        <div className="flex items-start justify-between">
+      <div className="relative px-6 py-6 text-white z-10">
+        <div className="flex items-start justify-between gap-4">
           <CardHeader />
           <div className="text-right">
-            <div className="text-[9px] uppercase tracking-widest opacity-80">Mã số</div>
-            <div className="text-base font-bold tabular-nums tracking-wide">
+            <div className="text-[9px] font-extrabold uppercase tracking-widest opacity-75">Mã số</div>
+            <div className="text-lg font-black tabular-nums tracking-wide text-shadow-sm">
               #{m.memberCode}
             </div>
           </div>
         </div>
 
         {/* Card type pill */}
-        <div className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider ring-1 ring-white/25 backdrop-blur">
-          <span className="h-1.5 w-1.5 rounded-full bg-white" />
+        <div className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider ring-1 ring-white/20 backdrop-blur-md">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-350 animate-pulse" />
           {durLabel(m.duration)} · {audienceLabel(m.audience)}
         </div>
 
         {/* Holder name */}
-        <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-widest opacity-80">Chủ thẻ</div>
-          <div className="text-xl font-bold tracking-tight text-shadow-sm">
+        <div className="mt-4">
+          <div className="text-[9px] font-extrabold uppercase tracking-widest opacity-75">Chủ thẻ</div>
+          <div className="text-2xl font-black tracking-tight text-shadow-md mt-0.5">
             {holderName.toUpperCase()}
           </div>
         </div>
 
         {/* Expiry banner */}
-        <div className="mt-4 flex items-end justify-between">
+        <div className="mt-5 flex items-end justify-between gap-4">
           <div>
-            <div className="text-[10px] uppercase tracking-widest opacity-80">Hiệu lực đến</div>
-            <div className="text-base font-semibold">{formatDate(m.endDate)}</div>
+            <div className="text-[9px] font-extrabold uppercase tracking-widest opacity-75">Hiệu lực đến</div>
+            <div className="text-base font-extrabold text-shadow-sm mt-0.5">{formatDate(m.endDate)}</div>
           </div>
           <div
-            className={`rounded-xl px-3 py-1.5 text-right ring-1 ${
+            className={`rounded-2xl px-4 py-2 text-right shadow-md ring-1 backdrop-blur-md transition-all ${
               isExpiring
-                ? "bg-amber-400/90 text-amber-950 ring-amber-200/50"
-                : "bg-white/20 text-white ring-white/25"
+                ? "bg-amber-500/90 text-amber-950 ring-amber-300/40"
+                : "bg-white/15 text-white ring-white/20"
             }`}
           >
-            <div className="text-[9px] uppercase tracking-wider opacity-90">Còn lại</div>
-            <div className="text-lg font-extrabold tabular-nums">{days} ngày</div>
+            <div className="text-[9px] font-extrabold uppercase tracking-wider opacity-85">Còn lại</div>
+            <div className="text-lg font-black tabular-nums">{days} ngày</div>
           </div>
         </div>
       </div>
@@ -96,69 +96,72 @@ export function PackageCard({ p, holderName }: { p: TicketPackage; holderName: s
   const pct = Math.round((p.remainingSessions / p.totalSessions) * 100);
 
   return (
-    <div className="relative overflow-hidden rounded-2.5xl shadow-elevated">
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(135deg, #f59e0b 0%, #d97706 55%, #92400e 100%)",
-        }}
-      />
-      <div className="absolute inset-0 holo-shine" />
-
-      <div className="relative px-5 py-5 text-white">
-        <div className="flex items-start justify-between">
-          <CardHeader />
-          <div className="text-right">
-            <div className="text-[9px] uppercase tracking-widest opacity-80">Mã số</div>
-            <div className="text-base font-bold tabular-nums">#{p.memberCode}</div>
+    <div className="relative overflow-hidden rounded-3xl shadow-float border border-slate-100 bg-white">
+      {/* Front header bar with gradient background */}
+      <div className="relative overflow-hidden px-6 py-6 text-white">
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            background:
+              "linear-gradient(135deg, #f59e0b 0%, #d97706 60%, #78350f 100%)",
+          }}
+        />
+        <div className="absolute inset-0 holo-shine z-0" />
+        
+        <div className="relative z-10">
+          <div className="flex items-start justify-between gap-4">
+            <CardHeader />
+            <div className="text-right">
+              <div className="text-[9px] font-extrabold uppercase tracking-widest opacity-80">Mã số</div>
+              <div className="text-lg font-black tabular-nums text-shadow-sm">#{p.memberCode}</div>
+            </div>
           </div>
-        </div>
 
-        <div className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider ring-1 ring-white/25 backdrop-blur">
-          <span className="h-1.5 w-1.5 rounded-full bg-white" />
-          Gói {p.totalSessions} lượt · {audienceLabel(p.audience)}
-        </div>
+          <div className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider ring-1 ring-white/20 backdrop-blur-md">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-350 animate-pulse" />
+            Gói {p.totalSessions} lượt · {audienceLabel(p.audience)}
+          </div>
 
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-4xl font-extrabold tabular-nums tracking-tight">
-            {p.remainingSessions}
-          </span>
-          <span className="text-sm opacity-90">/ {p.totalSessions} lượt còn lại</span>
-        </div>
+          <div className="mt-4 flex items-baseline gap-2 text-shadow-sm">
+            <span className="text-4xl font-black tabular-nums tracking-tight">
+              {p.remainingSessions}
+            </span>
+            <span className="text-xs font-bold opacity-90">/ {p.totalSessions} lượt còn lại</span>
+          </div>
 
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20">
-          <div
-            className="h-full rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.5)]"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+          <div className="mt-3.5 h-2 overflow-hidden rounded-full bg-white/20 shadow-inner">
+            <div
+              className="h-full rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.6)] transition-all duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
 
-        <div className="mt-3 text-[11px] opacity-90">
-          {holderName.toUpperCase()}
+          <div className="mt-4 text-[10px] font-extrabold tracking-wider opacity-85 uppercase">
+            {holderName}
+          </div>
         </div>
       </div>
 
-      {/* Back grid - như thẻ cứng */}
-      <div className="relative border-t border-amber-200/40 bg-white px-5 py-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">
+      {/* Back check-off grid styled cleanly */}
+      <div className="relative border-t border-slate-100 bg-slate-50/50 px-6 py-5 z-10">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
             Lịch sử lượt sử dụng
           </div>
-          <div className="text-[10px] text-slate-500">
-            Đã dùng <b className="text-amber-700">{used}</b>/{p.totalSessions}
+          <div className="text-[10.5px] font-semibold text-slate-500">
+            Đã dùng <b className="text-amber-700 font-extrabold">{used}</b>/{p.totalSessions} lượt
           </div>
         </div>
-        <div className={`grid gap-1 ${p.totalSessions === 30 ? "grid-cols-10" : "grid-cols-[repeat(15,1fr)]"}`}>
+        <div className={`grid gap-1.5 ${p.totalSessions === 30 ? "grid-cols-10" : "grid-cols-[repeat(15,1fr)]"}`}>
           {Array.from({ length: p.totalSessions }).map((_, i) => {
             const isUsed = i < used;
             return (
               <div
                 key={i}
-                className={`flex aspect-square items-center justify-center rounded-md border text-[10px] font-bold ${
+                className={`flex aspect-square items-center justify-center rounded-lg border text-[10px] font-extrabold transition-all duration-300 ${
                   isUsed
-                    ? "border-amber-700 bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-sm"
-                    : "border-amber-200 bg-amber-50/50 text-amber-300"
+                    ? "border-amber-600 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-350"
                 }`}
               >
                 {isUsed ? "✓" : i + 1}
