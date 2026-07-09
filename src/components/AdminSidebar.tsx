@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 const GROUPS: { title: string; items: { href: string; label: string; ownerOnly?: boolean }[] }[] = [
   { title: "Vận hành", items: [
     { href: "/admin", label: "🏠 Dashboard" },
+    { href: "/admin/counter-sale", label: "💳 Bán vé/lớp" },
     { href: "/admin/orders", label: "📋 Đơn hàng" },
     { href: "/admin/qr-gate", label: "🚪 Màn hình QR cổng" },
     { href: "/admin/checkin-assist", label: "📷 Điểm danh hộ" },
