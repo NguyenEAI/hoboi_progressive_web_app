@@ -1,0 +1,28 @@
+{
+    "scripts":  {
+                    "install":  "npm install",
+                    "dev":  "npm run dev",
+                    "build":  "npm run build",
+                    "test":  "npm run typecheck"
+                },
+    "slug":  "hoboi-version2",
+    "description":  "PWA quản lý hồ bơi: quầy bán vé, vé lượt, khóa học bơi, check-in và báo cáo.",
+    "createdAt":  "2026-07-09T09:52:30.8278576Z",
+    "platform":  "web",
+    "version":  "0.1.0",
+    "url":  "http://localhost:3000",
+    "ports":  [
+                  3000
+              ],
+    "runtime":  {
+                    "node":  "\u003e=20",
+                    "packageManager":  "npm"
+                },
+    "name":  "Hệ thống quản lý hồ bơi Prosper Plaza",
+    "stack":  [
+                  "next.js",
+                  "firebase",
+                  "pwa"
+              ],
+    "$schema":  "vibe-app/v1"
+}

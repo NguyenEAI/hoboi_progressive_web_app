@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "currentPhase": 0,
+  "project": {
+    "slug": "hoboi-version2",
+    "name": "Hệ thống quản lý hồ bơi Prosper Plaza"
+  },
+  "phases": [
+    {
+      "name": "Discovery",
+      "number": 0,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "ready",
+      "requiredArtifacts": [
+        "DISCOVERY.md"
+      ]
+    },
+    {
+      "name": "Research + PRD + Plan + Mockup",
+      "number": 1,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
+      "requiredArtifacts": [
+        "RESEARCH.md",
+        "PRD.md",
+        "IMPLEMENTATION_PLAN.md",
+        "mockups/index.html",
+        "MOCKUP_REVIEW.md"
+      ]
+    },
+    {
+      "name": "Planning + Mockup Approved",
+      "number": 2,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
+      "requiredArtifacts": []
+    },
+    {
+      "name": "Coding",
+      "number": 3,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
+      "requiredArtifacts": [
+        "IMPLEMENTATION_PLAN.md",
+        "TEST_PLAN.md"
+      ]
+    },
+    {
+      "name": "Test Plan Approved",
+      "number": 4,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
+      "requiredArtifacts": []
+    },
+    {
+      "name": "Testing",
+      "number": 5,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
+      "requiredArtifacts": [
+        "TEST_PLAN.md"
+      ]
+    },
+    {
+      "name": "Refinement",
+      "number": 6,
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
+      "requiredArtifacts": []
+    }
+  ],
+  "status": "ready",
+  "phaseName": "Discovery",
+  "approvals": [],
+  "history": [
+    {
+      "phase": 0,
+      "note": "Initialized existing pool app for vibe-builder workflow",
+      "action": "initialized",
+      "at": "2026-07-09T09:52:30.6611710Z"
+    }
+  ],
+  "checkPhaseCallCount": 2,
+  "checkPhaseHistory": [
+    "2026-07-09T09:52:43.917Z",
+    "2026-07-09T09:57:26.015Z"
+  ]
+}
