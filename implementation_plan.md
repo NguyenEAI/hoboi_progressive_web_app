@@ -13,17 +13,17 @@
 
 ## Phần bán hàng tại quầy
 
-- [ ] Tạo màn quầy bán vé/lớp trong khu lễ tân.
-- [ ] Làm ô tìm khách bằng SĐT thật nhanh.
-- [ ] Làm tạo khách nhanh tại quầy.
+- [x] Tạo màn quầy bán vé/lớp trong khu lễ tân.
+- [x] Làm ô tìm khách bằng SĐT thật nhanh.
+- [x] Làm tạo khách nhanh tại quầy.
 - [ ] Hiển thị vé tháng/vé lượt/khóa học đang còn của khách.
-- [ ] Làm chọn vé tháng/quý/năm.
-- [ ] Làm chọn vé 15/30 lượt.
-- [ ] Làm chọn khóa học bơi 15 buổi.
-- [ ] Làm hóa đơn tạm bên phải.
-- [ ] Làm chọn tiền mặt/chuyển khoản.
-- [ ] Bấm đã thu tiền thì kích hoạt dịch vụ ngay.
-- [ ] Hiển thị kết quả sau khi kích hoạt.
+- [x] Làm chọn vé tháng/quý/năm.
+- [x] Làm chọn vé 15/30 lượt.
+- [x] Làm chọn khóa học bơi 15 buổi.
+- [x] Làm hóa đơn tạm bên phải.
+- [x] Làm chọn tiền mặt/chuyển khoản.
+- [x] Bấm đã thu tiền thì kích hoạt dịch vụ ngay.
+- [x] Hiển thị kết quả sau khi kích hoạt.
 
 ## Phần quản lý sau bán
 

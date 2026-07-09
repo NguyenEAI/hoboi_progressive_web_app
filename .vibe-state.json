@@ -127,11 +127,13 @@
       "note": "Anh Nguyên duyệt hướng giao diện và dặn bổ sung đầy đủ tính năng như app bán hàng kết hợp app quản lý; bắt đầu làm thật theo kế hoạch mở rộng."
     }
   ],
-  "checkPhaseCallCount": 4,
+  "checkPhaseCallCount": 6,
   "checkPhaseHistory": [
     "2026-07-09T09:52:43.917Z",
     "2026-07-09T09:57:26.015Z",
     "2026-07-09T10:03:05.610Z",
-    "2026-07-09T10:13:42.022Z"
+    "2026-07-09T10:13:42.022Z",
+    "2026-07-09T10:20:29.262Z",
+    "2026-07-09T10:21:34.796Z"
   ]
 }
