@@ -101,9 +101,10 @@
       "note": "Anh Nguyên xác nhận: không làm lại từ trắng; dùng giao diện đã tạo sẵn làm nền, nâng cấp màn quầy cho sang xịn và dễ dùng hơn."
     }
   ],
-  "checkPhaseCallCount": 2,
+  "checkPhaseCallCount": 3,
   "checkPhaseHistory": [
     "2026-07-09T09:52:43.917Z",
-    "2026-07-09T09:57:26.015Z"
+    "2026-07-09T09:57:26.015Z",
+    "2026-07-09T10:03:05.610Z"
   ]
 }
