@@ -48,6 +48,8 @@ Diễn giải thực tế:
 - Vẫn rõ ràng cho lễ tân dùng nhanh.
 - Hợp hồ bơi: sạch, mát, có cảm giác nước/không gian sáng.
 
+Quan trọng: anh đã tạo sẵn nhiều giao diện trong thư mục dự án. Mình **không vẽ lại từ trắng**; mình dùng giao diện sẵn có làm nền, rồi nâng cấp cho đúng vibe và đúng luồng quầy.
+
 ## Cách bán vé/lớp mong muốn
 
 Anh chọn hướng **cả hai**:

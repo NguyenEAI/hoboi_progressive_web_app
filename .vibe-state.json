@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "currentPhase": 0,
+  "currentPhase": 1,
   "project": {
     "slug": "hoboi-version2",
     "name": "Hệ thống quản lý hồ bơi Prosper Plaza"
@@ -9,9 +9,9 @@
     {
       "name": "Discovery",
       "number": 0,
-      "approvalNote": null,
-      "completedAt": null,
-      "status": "ready",
+      "approvalNote": "Anh Nguyên xác nhận: không làm lại từ trắng; dùng giao diện đã tạo sẵn làm nền, nâng cấp màn quầy cho sang xịn và dễ dùng hơn.",
+      "completedAt": "2026-07-09T10:01:22.952Z",
+      "status": "done",
       "requiredArtifacts": [
         "DISCOVERY.md"
       ]
@@ -21,7 +21,7 @@
       "number": 1,
       "approvalNote": null,
       "completedAt": null,
-      "status": "blocked",
+      "status": "ready",
       "requiredArtifacts": [
         "RESEARCH.md",
         "PRD.md",
@@ -77,14 +77,28 @@
     }
   ],
   "status": "ready",
-  "phaseName": "Discovery",
-  "approvals": [],
+  "phaseName": "Research + PRD + Plan + Mockup",
+  "approvals": [
+    {
+      "from": 0,
+      "to": 1,
+      "note": "Anh Nguyên xác nhận: không làm lại từ trắng; dùng giao diện đã tạo sẵn làm nền, nâng cấp màn quầy cho sang xịn và dễ dùng hơn.",
+      "at": "2026-07-09T10:01:22.952Z"
+    }
+  ],
   "history": [
     {
       "phase": 0,
       "note": "Initialized existing pool app for vibe-builder workflow",
       "action": "initialized",
       "at": "2026-07-09T09:52:30.6611710Z"
+    },
+    {
+      "phase": 0,
+      "action": "advanced",
+      "to": 1,
+      "at": "2026-07-09T10:01:22.952Z",
+      "note": "Anh Nguyên xác nhận: không làm lại từ trắng; dùng giao diện đã tạo sẵn làm nền, nâng cấp màn quầy cho sang xịn và dễ dùng hơn."
     }
   ],
   "checkPhaseCallCount": 2,

@@ -11,3 +11,5 @@
 | Premium visual style | sang xịn | anh Nguyên chọn vibe |
 | Customer search | tìm khách bằng SĐT | anh Nguyên nói nghẽn nhất ở tìm khách |
 | Counter sales | bán vé/lớp tại quầy | anh Nguyên chọn ưu tiên |
+| Existing screens | giao diện anh đã tạo sẵn | anh Nguyên nhắc trong thư mục đã có mọi thông tin |
+| UI improvement | nâng cấp giao diện sẵn có | không vẽ lại từ trắng |
