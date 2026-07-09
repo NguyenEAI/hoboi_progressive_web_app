@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "currentPhase": 1,
+  "currentPhase": 2,
   "project": {
     "slug": "hoboi-version2",
     "name": "Hệ thống quản lý hồ bơi Prosper Plaza"
@@ -19,9 +19,9 @@
     {
       "name": "Research + PRD + Plan + Mockup",
       "number": 1,
-      "approvalNote": null,
-      "completedAt": null,
-      "status": "ready",
+      "approvalNote": "Anh Nguyên đã duyệt bản nháp màn quầy bán vé/lớp: đẹp rồi, dùng hướng này để sửa màn quầy thật.",
+      "completedAt": "2026-07-09T10:10:58.750Z",
+      "status": "done",
       "requiredArtifacts": [
         "RESEARCH.md",
         "PRD.md",
@@ -35,7 +35,7 @@
       "number": 2,
       "approvalNote": null,
       "completedAt": null,
-      "status": "blocked",
+      "status": "ready",
       "requiredArtifacts": []
     },
     {
@@ -77,13 +77,19 @@
     }
   ],
   "status": "ready",
-  "phaseName": "Research + PRD + Plan + Mockup",
+  "phaseName": "Planning + Mockup Approved",
   "approvals": [
     {
       "from": 0,
       "to": 1,
       "note": "Anh Nguyên xác nhận: không làm lại từ trắng; dùng giao diện đã tạo sẵn làm nền, nâng cấp màn quầy cho sang xịn và dễ dùng hơn.",
       "at": "2026-07-09T10:01:22.952Z"
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "note": "Anh Nguyên đã duyệt bản nháp màn quầy bán vé/lớp: đẹp rồi, dùng hướng này để sửa màn quầy thật.",
+      "at": "2026-07-09T10:10:58.750Z"
     }
   ],
   "history": [
@@ -99,6 +105,13 @@
       "to": 1,
       "at": "2026-07-09T10:01:22.952Z",
       "note": "Anh Nguyên xác nhận: không làm lại từ trắng; dùng giao diện đã tạo sẵn làm nền, nâng cấp màn quầy cho sang xịn và dễ dùng hơn."
+    },
+    {
+      "phase": 1,
+      "action": "advanced",
+      "to": 2,
+      "at": "2026-07-09T10:10:58.750Z",
+      "note": "Anh Nguyên đã duyệt bản nháp màn quầy bán vé/lớp: đẹp rồi, dùng hướng này để sửa màn quầy thật."
     }
   ],
   "checkPhaseCallCount": 3,
