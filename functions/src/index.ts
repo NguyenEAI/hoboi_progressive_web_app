@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 admin.initializeApp();
 
-export { createOrder, confirmPayment, cancelOrder, refundOrder } from "./orders";
+export { createOrder, createCounterSale, confirmPayment, cancelOrder, refundOrder } from "./orders";
 export {
   issueQrToken,
   checkinByQr,

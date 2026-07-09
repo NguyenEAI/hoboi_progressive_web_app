@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { searchCustomerByPhone, createCustomerByPhone } from "@/lib/callable";
+import { useEffect, useMemo, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
+import { searchCustomerByPhone, createCustomerByPhone, createCounterSale } from "@/lib/callable";
 import { usePricing } from "@/lib/hooks/usePricing";
 import { formatVND } from "@/lib/utils";
-import { AUDIENCES, PACKAGE_SIZES, PASS_DURATIONS, SWIM_STYLES } from "@/lib/constants";
-import type { Audience, PackageSize, PassDuration, ProductType, SwimStyle } from "@/types";
+import { AUDIENCES, PACKAGE_SIZES, PASS_DURATIONS, SLOT_START_HOURS, SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
+import type { Audience, Coach, PackageSize, PassDuration, ProductType, SwimStyle } from "@/types";
 import { Search, UserPlus, WalletCards, Waves, GraduationCap, Ticket, X } from "lucide-react";
 
 type CustomerHit = {
@@ -39,8 +41,20 @@ export default function CounterSalePage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [items, setItems] = useState<SaleItem[]>([]);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [coachId, setCoachId] = useState("");
+  const [startHour, setStartHour] = useState<number>(7);
+  const [method, setMethod] = useState<"CASH" | "BANK_TRANSFER">("CASH");
+  const [paying, setPaying] = useState(false);
 
   const total = useMemo(() => items.reduce((sum, item) => sum + item.amountVND, 0), [items]);
+  const hasCourse = items.some((item) => item.productType === "SWIM_COURSE");
+
+  useEffect(() => {
+    getDocs(collection(db, "coaches"))
+      .then((s) => setCoaches(s.docs.map((d) => ({ id: d.id, ...d.data() } as Coach)).filter((c) => c.active)))
+      .catch(() => setCoaches([]));
+  }, []);
 
   async function findCustomer() {
     const raw = phone.trim();
@@ -132,6 +146,43 @@ export default function CounterSalePage() {
 
   function removeItem(id: string) {
     setItems((cur) => cur.filter((item) => item.id !== id));
+  }
+
+  async function payAndActivate() {
+    if (!customer || !items.length) return;
+    if (hasCourse && !coachId) {
+      setError("Chọn HLV cho khóa học trước khi thu tiền.");
+      return;
+    }
+    setPaying(true);
+    setError(undefined);
+    setMessage(undefined);
+    try {
+      const codes: string[] = [];
+      for (const item of items) {
+        const r = await createCounterSale({
+          customerId: customer.id,
+          beneficiaryKind: "USER",
+          beneficiaryId: customer.id,
+          beneficiaryName: customer.fullName || displayPhone(customer.phone || phone),
+          productType: item.productType,
+          duration: item.duration,
+          packageSize: item.packageSize,
+          swimStyle: item.swimStyle,
+          audience: item.audience,
+          coachId: item.productType === "SWIM_COURSE" ? coachId : undefined,
+          startHour: item.productType === "SWIM_COURSE" ? startHour : undefined,
+          method,
+        });
+        codes.push(`MS${r.memberCode}`);
+      }
+      setItems([]);
+      setMessage(`Đã thu ${formatVND(total)} và kích hoạt ${codes.join(", ")}.`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPaying(false);
+    }
   }
 
   return (
@@ -276,23 +327,63 @@ export default function CounterSalePage() {
             )}
           </div>
 
+          {hasCourse && (
+            <div className="mt-4 rounded-3xl border border-sky-100 bg-sky-50/70 p-4">
+              <div className="font-extrabold text-sky-900">Thông tin khóa học</div>
+              <label className="mt-3 block text-xs font-bold uppercase text-sky-700">HLV</label>
+              <select
+                value={coachId}
+                onChange={(e) => setCoachId(e.target.value)}
+                className="mt-1 w-full rounded-2xl border-2 border-white bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-sky-300"
+              >
+                <option value="">Chọn HLV</option>
+                {coaches.map((coach) => (
+                  <option key={coach.id} value={coach.id}>
+                    {coach.fullName} · {coach.weekdays.map((w) => WEEKDAY_LABELS[w]).join(" / ")}
+                  </option>
+                ))}
+              </select>
+              <label className="mt-3 block text-xs font-bold uppercase text-sky-700">Giờ học</label>
+              <select
+                value={startHour}
+                onChange={(e) => setStartHour(Number(e.target.value))}
+                className="mt-1 w-full rounded-2xl border-2 border-white bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-sky-300"
+              >
+                {SLOT_START_HOURS.map((hour) => (
+                  <option key={hour} value={hour}>{hour}:00</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="mt-5 border-t border-slate-200 pt-5">
             <div className="flex items-center justify-between text-sm text-slate-500"><span>Tổng tiền</span><span>{items.length} dịch vụ</span></div>
             <div className="mt-1 flex items-end justify-between"><span className="text-slate-500">Cần thu</span><span className="text-3xl font-extrabold text-brand-800">{formatVND(total)}</span></div>
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <button className="rounded-2xl border-2 border-brand-100 bg-white py-3 text-sm font-bold text-brand-700">Tiền mặt</button>
-            <button className="rounded-2xl border-2 border-slate-100 bg-white py-3 text-sm font-bold text-slate-500">Chuyển khoản</button>
+            <button
+              onClick={() => setMethod("CASH")}
+              className={`rounded-2xl border-2 py-3 text-sm font-bold ${method === "CASH" ? "border-brand-100 bg-white text-brand-700" : "border-slate-100 bg-white text-slate-500"}`}
+            >
+              Tiền mặt
+            </button>
+            <button
+              onClick={() => setMethod("BANK_TRANSFER")}
+              className={`rounded-2xl border-2 py-3 text-sm font-bold ${method === "BANK_TRANSFER" ? "border-brand-100 bg-white text-brand-700" : "border-slate-100 bg-white text-slate-500"}`}
+            >
+              Chuyển khoản
+            </button>
           </div>
 
           <button
-            disabled={!customer || !items.length}
+            onClick={payAndActivate}
+            disabled={!customer || !items.length || paying || (hasCourse && !coachId)}
             className="mt-4 w-full rounded-3xl bg-gradient-to-r from-brand-700 to-teal-600 py-4 text-lg font-extrabold text-white shadow-xl shadow-brand-700/25 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none"
           >
-            Đã thu tiền · Kích hoạt ngay
+            {paying ? "Đang kích hoạt…" : "Đã thu tiền · Kích hoạt ngay"}
           </button>
-          <p className="mt-3 text-center text-xs text-slate-500">Bước kế tiếp sẽ nối nút này với phần tạo đơn và kích hoạt vé/lớp.</p>
+          <p className="mt-3 text-center text-xs text-slate-500">Thu xong, vé/lớp sẽ hiện trong hệ thống ngay.</p>
         </aside>
       </div>
     </div>

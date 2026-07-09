@@ -260,6 +260,157 @@ async function notifyUser(uid: string, title: string, body: string, type: string
     await admin.messaging().sendEachForMulticast({ tokens, notification: { title, body } });
 }
 
+// =============== COUNTER SALE: lễ tân bán + thu + kích hoạt ngay ===============
+// data: { customerId, beneficiaryKind, beneficiaryId, beneficiaryName,
+//         productType, duration?, packageSize?, swimStyle?, audience?, coachId?, startHour?, weekOffset? }
+export const createCounterSale = onCall({ region: REGION }, async (req) => {
+  requireStaff(req);
+  const d = req.data as any;
+  const prices = await loadPricing();
+  const productType = d.productType as string;
+  const customerId = String(d.customerId ?? "");
+  if (!customerId) throw new HttpsError("invalid-argument", "Thiếu khách hàng");
+
+  let amountVND = 0;
+  const snapshot: { [k: string]: unknown } = { audience: d.audience ?? null };
+  if (productType === "PASS") {
+    const aud = d.audience as Audience;
+    const dur = d.duration as PassDuration;
+    if (!prices.pass[aud]?.[dur]) throw new HttpsError("invalid-argument", "Sai loại vé/đối tượng");
+    amountVND = prices.pass[aud][dur];
+    snapshot.name = passLabel(dur);
+    snapshot.duration = dur;
+  } else if (productType === "PACKAGE") {
+    const aud = d.audience as Audience;
+    const size = d.packageSize as PackageSize;
+    if (!prices.pkg[aud]?.[size]) throw new HttpsError("invalid-argument", "Sai gói/đối tượng");
+    amountVND = prices.pkg[aud][size];
+    snapshot.name = packLabel(size);
+    snapshot.packageSize = size;
+  } else if (productType === "SWIM_COURSE") {
+    const style = d.swimStyle as SwimStyle;
+    if (!style) throw new HttpsError("invalid-argument", "Thiếu kiểu bơi");
+    if (!d.coachId || typeof d.startHour !== "number")
+      throw new HttpsError("invalid-argument", "Thiếu HLV hoặc giờ học");
+    amountVND = prices.course;
+    snapshot.name = styleLabel(style);
+    snapshot.swimStyle = style;
+  } else {
+    throw new HttpsError("invalid-argument", "Loại dịch vụ không hợp lệ");
+  }
+
+  const beneficiaryKind = d.beneficiaryKind ?? "USER";
+  const beneficiaryId = d.beneficiaryId ?? customerId;
+  const beneficiaryName = d.beneficiaryName ?? "";
+  const now = admin.firestore.Timestamp.now();
+
+  const result = await db().runTransaction(async (tx) => {
+    let coachName = "";
+    let slotId: string | undefined;
+    let startDateTs: admin.firestore.Timestamp | undefined;
+
+    if (productType === "SWIM_COURSE") {
+      const coachSnap = await tx.get(db().doc(`coaches/${d.coachId}`));
+      if (!coachSnap.exists) throw new HttpsError("not-found", "HLV không tồn tại");
+      const coach = coachSnap.data()!;
+      coachName = coach.fullName ?? "";
+      const weekdays = (coach.weekdays ?? []) as number[];
+      const { startDate, weekday } = pickNextSlot(weekdays, Number(d.startHour), Number(d.weekOffset ?? 0));
+      slotId = `${d.coachId}_${weekday}_${Number(d.startHour)}`;
+      const slotRef = db().doc(`coaches/${d.coachId}/slots/${slotId}`);
+      const slot = await tx.get(slotRef);
+      if (!slot.exists) throw new HttpsError("not-found", "Khung giờ không tồn tại");
+      const s = slot.data()!;
+      if ((s.enrolledCount ?? 0) >= (s.capacity ?? SLOT_CAPACITY))
+        throw new HttpsError("resource-exhausted", "Khung giờ đã đầy 20/20");
+      tx.update(slotRef, { enrolledCount: (s.enrolledCount ?? 0) + 1 });
+      startDateTs = admin.firestore.Timestamp.fromDate(startDate);
+    }
+
+    const code = await nextMemberCode(tx);
+    const orderRef = db().collection("orders").doc();
+    tx.set(orderRef, {
+      id: orderRef.id,
+      customerId,
+      beneficiaryKind,
+      beneficiaryId,
+      beneficiaryName,
+      productType,
+      productSnapshot: snapshot,
+      amountVND,
+      status: "PAID",
+      createdAt: now,
+      paidAt: now,
+      confirmedByStaffId: req.auth!.uid,
+      source: "COUNTER",
+      ...(productType === "SWIM_COURSE" ? { coachId: d.coachId, slotId, startDate: startDateTs } : {}),
+    });
+
+    if (productType === "PASS") {
+      const days = PASS_DAYS[snapshot.duration as PassDuration];
+      const end = new Date(); end.setDate(end.getDate() + days);
+      const ref = db().collection("memberships").doc();
+      tx.set(ref, {
+        id: ref.id, memberCode: code, userId: customerId,
+        holderKind: beneficiaryKind, holderId: beneficiaryId, holderName: beneficiaryName,
+        orderId: orderRef.id, duration: snapshot.duration, audience: snapshot.audience,
+        startDate: now, endDate: admin.firestore.Timestamp.fromDate(end),
+        amountVND, status: "ACTIVE", createdAt: now,
+      });
+    } else if (productType === "PACKAGE") {
+      const total = PACKAGE_SESSIONS[snapshot.packageSize as PackageSize];
+      const ref = db().collection("ticketPackages").doc();
+      tx.set(ref, {
+        id: ref.id, memberCode: code, userId: customerId, orderId: orderRef.id,
+        size: snapshot.packageSize, audience: snapshot.audience,
+        totalSessions: total, remainingSessions: total,
+        amountVND, status: "ACTIVE", usageHistory: [], createdAt: now,
+      });
+    } else if (productType === "SWIM_COURSE") {
+      const start = startDateTs!.toDate();
+      const expiry = new Date(start);
+      expiry.setDate(expiry.getDate() + SWIM_COURSE_VALIDITY_DAYS);
+      const ref = db().collection("enrollments").doc();
+      tx.set(ref, {
+        id: ref.id, memberCode: code,
+        studentKind: beneficiaryKind, studentId: beneficiaryId, studentName: beneficiaryName,
+        parentId: beneficiaryKind === "CHILD" ? customerId : null,
+        orderId: orderRef.id, swimStyle: snapshot.swimStyle,
+        coachId: d.coachId, coachName, slotId,
+        startDate: startDateTs, expiryDate: admin.firestore.Timestamp.fromDate(expiry),
+        totalSessions: SWIM_COURSE_TOTAL_SESSIONS, attendedSessions: 0,
+        status: "ACTIVE", createdAt: now,
+      });
+    }
+
+    tx.set(db().collection("payments").doc(), {
+      orderId: orderRef.id,
+      amountVND,
+      method: d.method === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH",
+      receivedByStaffId: req.auth!.uid,
+      at: now,
+    });
+
+    tx.set(db().collection("auditLogs").doc(), {
+      actorId: req.auth!.uid,
+      action: "COUNTER_SALE",
+      targetType: "order",
+      targetId: orderRef.id,
+      detail: { productType, amountVND, customerId, beneficiaryId },
+      at: now,
+    });
+
+    return { ok: true, orderId: orderRef.id, memberCode: code, amountVND, productName: snapshot.name as string };
+  });
+
+  try {
+    await notifyUser(customerId, "Dịch vụ đã kích hoạt 🎉", `${result.productName} đã sẵn sàng.`, "SERVICE_ACTIVATED");
+  } catch (e) {
+    console.warn("notifyUser sau createCounterSale thất bại", e);
+  }
+  return result;
+});
+
 // =============== CANCEL ORDER (chưa thanh toán) ===============
 export const cancelOrder = onCall({ region: REGION }, async (req) => {
   const uid = requireAuth(req);

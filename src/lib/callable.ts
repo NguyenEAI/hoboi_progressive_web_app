@@ -21,6 +21,24 @@ export const createOrder = call<
   { orderId: string; amountVND: number }
 >("createOrder");
 
+export const createCounterSale = call<
+  {
+    customerId: string;
+    beneficiaryKind: "USER" | "CHILD";
+    beneficiaryId: string;
+    beneficiaryName: string;
+    productType: "PASS" | "PACKAGE" | "SWIM_COURSE";
+    duration?: string;
+    packageSize?: string;
+    swimStyle?: string;
+    audience?: string;
+    coachId?: string;
+    startHour?: number;
+    weekOffset?: number;
+    method?: "CASH" | "BANK_TRANSFER";
+  },
+  { ok: boolean; orderId: string; memberCode: string; amountVND: number; productName: string }
+>("createCounterSale");
 export const confirmPayment = call<{ orderId: string }, { ok: boolean; memberCode: string }>("confirmPayment");
 export const cancelOrder = call<{ orderId: string }, { ok: boolean }>("cancelOrder");
 export const refundOrder = call<{ orderId: string; reason: string }, { ok: boolean }>("refundOrder");
