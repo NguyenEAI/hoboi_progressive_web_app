@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { searchCustomerByPhone, createCustomerByPhone, createCounterSale } from "@/lib/callable";
 import { usePricing } from "@/lib/hooks/usePricing";
 import { formatVND } from "@/lib/utils";
-import { AUDIENCES, PACKAGE_SIZES, PASS_DURATIONS, SLOT_START_HOURS, SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
-import type { Audience, Coach, PackageSize, PassDuration, ProductType, SwimStyle } from "@/types";
+import { PACKAGE_SIZES, PASS_DURATIONS, SLOT_START_HOURS, SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
+import type { Audience, Coach, Enrollment, Membership, PackageSize, PassDuration, ProductType, SwimStyle, TicketPackage } from "@/types";
 import { Search, UserPlus, WalletCards, Waves, GraduationCap, Ticket, X } from "lucide-react";
 
 type CustomerHit = {
@@ -33,6 +33,7 @@ type SaleItem = {
 export default function CounterSalePage() {
   const { pricing } = usePricing();
   const [phone, setPhone] = useState("");
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -46,9 +47,17 @@ export default function CounterSalePage() {
   const [startHour, setStartHour] = useState<number>(7);
   const [method, setMethod] = useState<"CASH" | "BANK_TRANSFER">("CASH");
   const [paying, setPaying] = useState(false);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [packages, setPackages] = useState<TicketPackage[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [loadingCards, setLoadingCards] = useState(false);
 
   const total = useMemo(() => items.reduce((sum, item) => sum + item.amountVND, 0), [items]);
   const hasCourse = items.some((item) => item.productType === "SWIM_COURSE");
+
+  function normalizePhoneInput(value: string) {
+    return value.replace(/[^0-9+]/g, "").slice(0, 13);
+  }
 
   useEffect(() => {
     getDocs(collection(db, "coaches"))
@@ -56,25 +65,62 @@ export default function CounterSalePage() {
       .catch(() => setCoaches([]));
   }, []);
 
+  async function loadActiveServices(customerId: string) {
+    setLoadingCards(true);
+    try {
+      const [memSnap, pkgSnap, enrSnap] = await Promise.all([
+        getDocs(query(collection(db, "memberships"), where("userId", "==", customerId), where("status", "==", "ACTIVE"))),
+        getDocs(query(collection(db, "ticketPackages"), where("userId", "==", customerId), where("status", "==", "ACTIVE"))),
+        Promise.all([
+          getDocs(query(collection(db, "enrollments"), where("studentId", "==", customerId), where("status", "==", "ACTIVE"))),
+          getDocs(query(collection(db, "enrollments"), where("parentId", "==", customerId), where("status", "==", "ACTIVE"))),
+        ]),
+      ]);
+      setMemberships(memSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Membership)));
+      setPackages(pkgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TicketPackage)));
+      const [selfEnrolls, childEnrolls] = enrSnap;
+      setEnrollments([...selfEnrolls.docs, ...childEnrolls.docs].map((d) => ({ id: d.id, ...d.data() } as Enrollment)));
+      return true;
+    } catch (e) {
+      setError(`Đã tìm thấy khách, nhưng chưa tải được vé/lượt/khóa đang còn: ${errorText(e)}`);
+      return false;
+    } finally {
+      setLoadingCards(false);
+    }
+  }
+
   async function findCustomer() {
-    const raw = phone.trim();
+    const raw = normalizePhoneInput(phoneInputRef.current?.value ?? phone);
     if (!raw) return;
+    setPhone(raw);
     setSearching(true);
     setError(undefined);
-    setMessage(undefined);
+    setMessage("Đang tìm khách…");
     setCustomer(null);
+    setMemberships([]);
+    setPackages([]);
+    setEnrollments([]);
     try {
-      const found = await searchCustomerByPhone({ phone: raw });
+      const found = await withTimeout(searchCustomerByPhone({ phone: raw }), 15000, "Tìm khách quá lâu. Kiểm tra mạng/Firebase rồi thử lại.");
+      if (!found?.found || !found.id) {
+        setShowCreate(true);
+        setMessage("Chưa có khách này. Nhập tên để tạo nhanh và bán tiếp.");
+        return;
+      }
       setCustomer(found);
       setShowCreate(false);
       setMessage(found.autoCreated ? "Đã tạo hồ sơ tạm cho khách. Có thể bổ sung tên ngay tại quầy." : "Đã tìm thấy khách.");
+      await loadActiveServices(found.id);
     } catch (e) {
-      const text = (e as Error).message;
-      if (text.toLowerCase().includes("not-found")) {
+      const code = errorCode(e);
+      const text = errorText(e);
+      if (code.includes("not-found") || text.toLowerCase().includes("not-found")) {
         setError(undefined);
         setShowCreate(true);
         setMessage("Chưa có khách này. Nhập tên để tạo nhanh và bán tiếp.");
       } else {
+        setShowCreate(false);
+        setMessage(undefined);
         setError(text);
       }
     } finally {
@@ -83,12 +129,17 @@ export default function CounterSalePage() {
   }
 
   async function createCustomer() {
-    if (!phone.trim() || !newName.trim()) return;
+    const raw = normalizePhoneInput(phoneInputRef.current?.value ?? phone);
+    if (!raw || !newName.trim()) return;
+    setPhone(raw);
     setCreating(true);
     setError(undefined);
     try {
-      const result = await createCustomerByPhone({ phone: phone.trim(), fullName: newName.trim() });
-      setCustomer({ id: result.uid, phone: phone.trim(), fullName: newName.trim(), role: "CUSTOMER" });
+      const result = await withTimeout(createCustomerByPhone({ phone: raw, fullName: newName.trim() }), 15000, "Tạo khách quá lâu. Kiểm tra mạng/Firebase rồi thử lại.");
+      setCustomer({ id: result.uid, phone: raw, fullName: newName.trim(), role: "CUSTOMER" });
+      setMemberships([]);
+      setPackages([]);
+      setEnrollments([]);
       setShowCreate(false);
       setMessage(result.alreadyExists ? "Khách đã có trong hệ thống, đã cập nhật tên." : "Đã tạo khách mới. Có thể bán vé/lớp ngay.");
     } catch (e) {
@@ -177,6 +228,7 @@ export default function CounterSalePage() {
         codes.push(`MS${r.memberCode}`);
       }
       setItems([]);
+      await loadActiveServices(customer.id);
       setMessage(`Đã thu ${formatVND(total)} và kích hoạt ${codes.join(", ")}.`);
     } catch (e) {
       setError((e as Error).message);
@@ -205,15 +257,17 @@ export default function CounterSalePage() {
             <label className="text-sm font-bold text-slate-600">Tìm khách bằng SĐT</label>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row">
               <input
+                ref={phoneInputRef}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/[^0-9+]/g, "").slice(0, 13))}
+                onChange={(e) => setPhone(normalizePhoneInput(e.target.value))}
+                onInput={(e) => setPhone(normalizePhoneInput((e.target as HTMLInputElement).value))}
                 onKeyDown={(e) => { if (e.key === "Enter") void findCustomer(); }}
                 placeholder="0905 123 456"
                 className="min-w-0 flex-1 rounded-2xl border-2 border-brand-100 bg-white px-5 py-4 text-2xl font-extrabold tracking-wide text-brand-950 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
               />
               <button
                 onClick={findCustomer}
-                disabled={searching || !phone.trim()}
+                disabled={searching}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-7 font-bold text-white shadow-lg shadow-brand-600/20 disabled:opacity-50"
               >
                 <Search className="size-4" /> {searching ? "Đang tìm…" : "Tìm"}
@@ -253,6 +307,17 @@ export default function CounterSalePage() {
                     <div className="mt-1 text-sm text-slate-500">{displayPhone(customer.phone || phone)} · {customer.role === "PARENT" ? "Phụ huynh" : "Khách"}</div>
                   </div>
                   <span className="rounded-full bg-white px-4 py-2 text-sm font-bold text-brand-700 shadow-sm">Sẵn sàng bán</span>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  {loadingCards ? (
+                    <div className="col-span-full rounded-2xl bg-white p-3 text-sm font-semibold text-slate-400 shadow-sm">Đang tải vé/lượt/khóa đang còn…</div>
+                  ) : (
+                    <>
+                      <ActiveCard label="Vé tháng/quý/năm" value={memberships.length ? `${memberships.length} vé còn hạn` : "Chưa có"} tone="emerald" />
+                      <ActiveCard label="Vé lượt" value={packages.length ? packages.map((p) => `${p.remainingSessions}/${p.totalSessions} lượt`).join(" · ") : "Chưa có"} tone="amber" />
+                      <ActiveCard label="Khóa học" value={enrollments.length ? enrollments.map((e) => `${e.attendedSessions}/${e.totalSessions} buổi`).join(" · ") : "Chưa có"} tone="sky" />
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -390,6 +455,16 @@ export default function CounterSalePage() {
   );
 }
 
+function ActiveCard({ label, value, tone }: { label: string; value: string; tone: "emerald" | "amber" | "sky" }) {
+  const toneClass = tone === "emerald" ? "text-emerald-800" : tone === "amber" ? "text-amber-700" : "text-sky-700";
+  return (
+    <div className="rounded-2xl bg-white p-3 shadow-sm">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className={`mt-1 font-bold ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
 function ServiceGroup({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section>
@@ -414,6 +489,31 @@ function ServiceButton({ title, price, note, onClick }: { title: string; price: 
       <div className="mt-4 text-lg font-extrabold text-brand-700">{formatVND(price)}</div>
     </button>
   );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(timeoutMessage)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function errorCode(error: unknown) {
+  return String((error as { code?: unknown })?.code ?? "");
+}
+
+function errorText(error: unknown) {
+  const message = (error as { message?: unknown })?.message;
+  return typeof message === "string" && message.trim() ? message : "Lỗi không xác định.";
 }
 
 function displayPhone(phone?: string) {

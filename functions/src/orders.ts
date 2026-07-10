@@ -263,7 +263,7 @@ async function notifyUser(uid: string, title: string, body: string, type: string
 // =============== COUNTER SALE: lễ tân bán + thu + kích hoạt ngay ===============
 // data: { customerId, beneficiaryKind, beneficiaryId, beneficiaryName,
 //         productType, duration?, packageSize?, swimStyle?, audience?, coachId?, startHour?, weekOffset? }
-export const createCounterSale = onCall({ region: REGION }, async (req) => {
+export const createCounterSale = onCall({ region: REGION, cors: true }, async (req) => {
   requireStaff(req);
   const d = req.data as any;
   const prices = await loadPricing();
@@ -307,6 +307,8 @@ export const createCounterSale = onCall({ region: REGION }, async (req) => {
   const result = await db().runTransaction(async (tx) => {
     let coachName = "";
     let slotId: string | undefined;
+    let slotRef: FirebaseFirestore.DocumentReference | undefined;
+    let slotEnrolledCount = 0;
     let startDateTs: admin.firestore.Timestamp | undefined;
 
     if (productType === "SWIM_COURSE") {
@@ -317,17 +319,18 @@ export const createCounterSale = onCall({ region: REGION }, async (req) => {
       const weekdays = (coach.weekdays ?? []) as number[];
       const { startDate, weekday } = pickNextSlot(weekdays, Number(d.startHour), Number(d.weekOffset ?? 0));
       slotId = `${d.coachId}_${weekday}_${Number(d.startHour)}`;
-      const slotRef = db().doc(`coaches/${d.coachId}/slots/${slotId}`);
+      slotRef = db().doc(`coaches/${d.coachId}/slots/${slotId}`);
       const slot = await tx.get(slotRef);
       if (!slot.exists) throw new HttpsError("not-found", "Khung giờ không tồn tại");
       const s = slot.data()!;
-      if ((s.enrolledCount ?? 0) >= (s.capacity ?? SLOT_CAPACITY))
+      slotEnrolledCount = s.enrolledCount ?? 0;
+      if (slotEnrolledCount >= (s.capacity ?? SLOT_CAPACITY))
         throw new HttpsError("resource-exhausted", "Khung giờ đã đầy 20/20");
-      tx.update(slotRef, { enrolledCount: (s.enrolledCount ?? 0) + 1 });
       startDateTs = admin.firestore.Timestamp.fromDate(startDate);
     }
 
     const code = await nextMemberCode(tx);
+    if (slotRef) tx.update(slotRef, { enrolledCount: slotEnrolledCount + 1 });
     const orderRef = db().collection("orders").doc();
     tx.set(orderRef, {
       id: orderRef.id,

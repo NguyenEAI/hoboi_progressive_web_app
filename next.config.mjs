@@ -1,11 +1,12 @@
 import withPWAInit from "next-pwa";
 
+const pwaDisabled = process.env.NODE_ENV === "development" || process.env.DISABLE_PWA === "1";
 const withPWA = withPWAInit({
   dest: "public",
   register: true,
   skipWaiting: true,
   // Tắt PWA khi dev hoặc khi đặt DISABLE_PWA=1 (build kiểm chứng trên máy ít RAM)
-  disable: process.env.NODE_ENV === "development" || process.env.DISABLE_PWA === "1",
+  disable: pwaDisabled,
 });
 
 const lowMem = process.env.LOW_MEM === "1";
@@ -21,4 +22,4 @@ const nextConfig = {
   experimental: { webpackMemoryOptimizations: lowMem },
 };
 
-export default withPWA(nextConfig);
+export default pwaDisabled ? nextConfig : withPWA(nextConfig);

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "currentPhase": 6,
+  "currentPhase": 3,
   "project": {
     "slug": "hoboi-version2",
     "name": "Hệ thống quản lý hồ bơi Prosper Plaza"
@@ -41,9 +41,9 @@
     {
       "name": "Coding",
       "number": 3,
-      "approvalNote": "Anh Nguyên duyệt cho em dùng Vibe Builder để test, sửa lỗi và trình bày các luồng hoạt động từ A-Z.",
-      "completedAt": "2026-07-10T08:30:14.680Z",
-      "status": "done",
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "ready",
       "requiredArtifacts": [
         "IMPLEMENTATION_PLAN.md",
         "TEST_PLAN.md"
@@ -52,17 +52,17 @@
     {
       "name": "Test Plan Approved",
       "number": 4,
-      "approvalNote": "Bắt đầu kiểm thử theo TEST_PLAN.md sau khi anh Nguyên đã duyệt test.",
-      "completedAt": "2026-07-10T08:30:14.746Z",
-      "status": "done",
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
       "requiredArtifacts": []
     },
     {
       "name": "Testing",
       "number": 5,
-      "approvalNote": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được.",
-      "completedAt": "2026-07-10T17:15:11.478Z",
-      "status": "done",
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "blocked",
       "requiredArtifacts": [
         "TEST_PLAN.md"
       ]
@@ -72,12 +72,12 @@
       "number": 6,
       "approvalNote": null,
       "completedAt": null,
-      "status": "ready",
+      "status": "blocked",
       "requiredArtifacts": []
     }
   ],
   "status": "ready",
-  "phaseName": "Refinement",
+  "phaseName": "Coding",
   "approvals": [
     {
       "from": 0,
@@ -96,24 +96,6 @@
       "to": 3,
       "note": "Anh Nguyên duyệt hướng giao diện và dặn bổ sung đầy đủ tính năng như app bán hàng kết hợp app quản lý; bắt đầu làm thật theo kế hoạch mở rộng.",
       "at": "2026-07-09T10:15:40.690Z"
-    },
-    {
-      "from": 3,
-      "to": 4,
-      "note": "Anh Nguyên duyệt cho em dùng Vibe Builder để test, sửa lỗi và trình bày các luồng hoạt động từ A-Z.",
-      "at": "2026-07-10T08:30:14.680Z"
-    },
-    {
-      "from": 4,
-      "to": 5,
-      "note": "Bắt đầu kiểm thử theo TEST_PLAN.md sau khi anh Nguyên đã duyệt test.",
-      "at": "2026-07-10T08:30:14.746Z"
-    },
-    {
-      "from": 5,
-      "to": 6,
-      "note": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được.",
-      "at": "2026-07-10T17:15:11.478Z"
     }
   ],
   "history": [
@@ -143,30 +125,9 @@
       "to": 3,
       "at": "2026-07-09T10:15:40.690Z",
       "note": "Anh Nguyên duyệt hướng giao diện và dặn bổ sung đầy đủ tính năng như app bán hàng kết hợp app quản lý; bắt đầu làm thật theo kế hoạch mở rộng."
-    },
-    {
-      "phase": 3,
-      "action": "advanced",
-      "to": 4,
-      "at": "2026-07-10T08:30:14.680Z",
-      "note": "Anh Nguyên duyệt cho em dùng Vibe Builder để test, sửa lỗi và trình bày các luồng hoạt động từ A-Z."
-    },
-    {
-      "phase": 4,
-      "action": "advanced",
-      "to": 5,
-      "at": "2026-07-10T08:30:14.746Z",
-      "note": "Bắt đầu kiểm thử theo TEST_PLAN.md sau khi anh Nguyên đã duyệt test."
-    },
-    {
-      "phase": 5,
-      "action": "advanced",
-      "to": 6,
-      "at": "2026-07-10T17:15:11.478Z",
-      "note": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được."
     }
   ],
-  "checkPhaseCallCount": 13,
+  "checkPhaseCallCount": 7,
   "checkPhaseHistory": [
     "2026-07-09T09:52:43.917Z",
     "2026-07-09T09:57:26.015Z",
@@ -174,12 +135,6 @@
     "2026-07-09T10:13:42.022Z",
     "2026-07-09T10:20:29.262Z",
     "2026-07-09T10:21:34.796Z",
-    "2026-07-10T08:29:11.838Z",
-    "2026-07-10T08:43:39.637Z",
-    "2026-07-10T08:54:55.890Z",
-    "2026-07-10T16:51:53.447Z",
-    "2026-07-10T17:19:02.257Z",
-    "2026-07-10T17:31:25.568Z",
-    "2026-07-10T17:35:27.579Z"
+    "2026-07-10T08:29:11.838Z"
   ]
 }

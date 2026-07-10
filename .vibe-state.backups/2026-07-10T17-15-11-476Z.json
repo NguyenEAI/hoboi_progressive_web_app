@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "currentPhase": 6,
+  "currentPhase": 5,
   "project": {
     "slug": "hoboi-version2",
     "name": "Hệ thống quản lý hồ bơi Prosper Plaza"
@@ -60,9 +60,9 @@
     {
       "name": "Testing",
       "number": 5,
-      "approvalNote": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được.",
-      "completedAt": "2026-07-10T17:15:11.478Z",
-      "status": "done",
+      "approvalNote": null,
+      "completedAt": null,
+      "status": "ready",
       "requiredArtifacts": [
         "TEST_PLAN.md"
       ]
@@ -72,12 +72,12 @@
       "number": 6,
       "approvalNote": null,
       "completedAt": null,
-      "status": "ready",
+      "status": "blocked",
       "requiredArtifacts": []
     }
   ],
   "status": "ready",
-  "phaseName": "Refinement",
+  "phaseName": "Testing",
   "approvals": [
     {
       "from": 0,
@@ -108,12 +108,6 @@
       "to": 5,
       "note": "Bắt đầu kiểm thử theo TEST_PLAN.md sau khi anh Nguyên đã duyệt test.",
       "at": "2026-07-10T08:30:14.746Z"
-    },
-    {
-      "from": 5,
-      "to": 6,
-      "note": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được.",
-      "at": "2026-07-10T17:15:11.478Z"
     }
   ],
   "history": [
@@ -157,16 +151,9 @@
       "to": 5,
       "at": "2026-07-10T08:30:14.746Z",
       "note": "Bắt đầu kiểm thử theo TEST_PLAN.md sau khi anh Nguyên đã duyệt test."
-    },
-    {
-      "phase": 5,
-      "action": "advanced",
-      "to": 6,
-      "at": "2026-07-10T17:15:11.478Z",
-      "note": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được."
     }
   ],
-  "checkPhaseCallCount": 13,
+  "checkPhaseCallCount": 10,
   "checkPhaseHistory": [
     "2026-07-09T09:52:43.917Z",
     "2026-07-09T09:57:26.015Z",
@@ -177,9 +164,6 @@
     "2026-07-10T08:29:11.838Z",
     "2026-07-10T08:43:39.637Z",
     "2026-07-10T08:54:55.890Z",
-    "2026-07-10T16:51:53.447Z",
-    "2026-07-10T17:19:02.257Z",
-    "2026-07-10T17:31:25.568Z",
-    "2026-07-10T17:35:27.579Z"
+    "2026-07-10T16:51:53.447Z"
   ]
 }

@@ -1,12 +1,30 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { BackButton } from "@/components/BackButton";
+import { useAuthUser } from "@/lib/hooks/useAuthUser";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const { profile, loading } = useAuthUser();
   const isRoot = pathname === "/admin";
+  const isStaff = profile?.role === "OWNER" || profile?.role === "RECEPTIONIST";
+
+  useEffect(() => {
+    if (loading) return;
+    if (!profile) {
+      router.replace("/signin");
+    } else if (!isStaff) {
+      router.replace(profile.role === "COACH" ? "/coach" : "/home");
+    }
+  }, [isStaff, loading, profile, router]);
+
+  if (loading || !profile || !isStaff) {
+    return <div className="min-h-screen bg-slate-50 p-6 text-sm font-semibold text-slate-500">Đang kiểm tra quyền truy cập…</div>;
+  }
 
   return (
     <div className="flex min-h-screen items-start">

@@ -157,11 +157,11 @@ export const searchCustomerByPhone = onCall({ region: REGION }, async (req) => {
 });
 
 // v2.5 — CRUD khách hàng (manage từ /admin/customers).
-// createCustomerByPhone: Owner-only. Tạo Auth user (nếu chưa có) + doc Firestore.
+// createCustomerByPhone: staff (Owner + Lễ tân). Tạo Auth user (nếu chưa có) + doc Firestore.
 // updateCustomerName: staff (Owner + Lễ tân). Đổi tên khách bất kỳ.
 // deleteCustomer: Owner-only. Xóa Firestore doc + Auth user. Audit log để truy vết.
 export const createCustomerByPhone = onCall({ region: REGION }, async (req) => {
-  const ownerUid = requireOwner(req);
+  const actorUid = requireStaff(req);
   const raw = String(req.data?.phone ?? "").trim();
   const fullName = String(req.data?.fullName ?? "").trim();
   const e164 = normalizeVNPhone(raw);
@@ -188,7 +188,7 @@ export const createCustomerByPhone = onCall({ region: REGION }, async (req) => {
     const cur = snap.data()!;
     if (cur.role && ["OWNER", "RECEPTIONIST", "COACH"].includes(cur.role as string))
       throw new HttpsError("already-exists", `SĐT này đã thuộc vai trò ${cur.role}, không thể tạo khách hàng.`);
-    // Đã có doc CUSTOMER/PARENT → chỉ cập nhật tên nếu owner cung cấp
+    // Đã có doc CUSTOMER/PARENT → chỉ cập nhật tên nếu nhân viên cung cấp
     if (fullName) await ref.set({ fullName }, { merge: true });
   } else {
     await ref.set({
@@ -204,7 +204,7 @@ export const createCustomerByPhone = onCall({ region: REGION }, async (req) => {
   }
 
   await db().collection("auditLogs").add({
-    actorId: ownerUid,
+    actorId: actorUid,
     action: "CREATE_CUSTOMER",
     targetType: "user",
     targetId: authUser.uid,
