@@ -65,6 +65,18 @@ export default function SignInPage() {
     recaptchaRef.current = null;
   }
 
+  function otpErrorMessage(error: unknown) {
+    const raw = error instanceof Error ? error.message : String(error);
+    const lower = raw.toLowerCase();
+    if (lower.includes("auth/captcha-check-failed") || lower.includes("hostname match not found")) {
+      return "App chưa được mở quyền gửi mã OTP trên địa chỉ web này. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
+    }
+    if (lower.includes("auth/too-many-requests")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
+    if (lower.includes("auth/invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
+    if (lower.includes("auth/quota-exceeded")) return "Hôm nay hệ thống gửi mã quá nhiều. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
+    return raw;
+  }
+
   async function sendOtp(retry = true) {
     if (sendingOtpRef.current) return;
     const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
@@ -81,7 +93,7 @@ export default function SignInPage() {
       setResendIn(60);
       toast.show(`Đã gửi OTP đến ${e164}`, "success");
     } catch (e) {
-      const message = (e as Error).message;
+      const message = otpErrorMessage(e);
       if (retry && message.toLowerCase().includes("recaptcha")) {
         resetRecaptchaVerifier();
         sendingOtpRef.current = false;
