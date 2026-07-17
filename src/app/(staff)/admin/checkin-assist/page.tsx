@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, query, where, getDocs, onSnapshot, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { staffCheckinByPhone, searchCustomerByPhone } from "@/lib/callable";
-import type { User, Child, Membership, TicketPackage, Enrollment } from "@/types";
+import { staffCheckinByPhone, searchCustomerByPhone, correctPackageCheckin, extendService } from "@/lib/callable";
+import type { User, Child, Membership, TicketPackage, Enrollment, CheckIn } from "@/types";
 import { formatDate } from "@/lib/utils";
 import { Ticket, Calendar, GraduationCap, Search } from "lucide-react";
 
@@ -27,6 +27,7 @@ export default function CheckinAssistPage() {
   const [customer, setCustomer] = useState<User>();
   const [children, setChildren] = useState<Child[]>([]);
   const [tickets, setTickets] = useState<Tickets>({ memberships: [], packages: [], enrollments: [] });
+  const [recentCheckins, setRecentCheckins] = useState<CheckIn[]>([]);
   const [msg, setMsg] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
@@ -76,6 +77,7 @@ export default function CheckinAssistPage() {
     setCustomer(undefined);
     setChildren([]);
     setTickets({ memberships: [], packages: [], enrollments: [] });
+    setRecentCheckins([]);
 
     const raw = phone.trim();
     if (!raw) return;
@@ -120,6 +122,7 @@ export default function CheckinAssistPage() {
         packages: pkgs.docs.map((d) => ({ id: d.id, ...d.data() } as TicketPackage)),
         enrollments: enrs.docs.map((d) => ({ id: d.id, ...d.data() } as Enrollment)),
       });
+      await loadRecentCheckins(p.id);
     } catch (e) {
       const msg = (e as Error).message ?? "";
       if (msg.startsWith("not-found:")) {
@@ -155,8 +158,18 @@ export default function CheckinAssistPage() {
     }
   }
 
-  async function checkinPackage(p: TicketPackage, count: number) {
-    if (!customer || count < 1 || count > p.remainingSessions) return;
+  async function loadRecentCheckins(userId: string) {
+    const snap = await getDocs(query(collection(db, "checkins"), where("userId", "==", userId)));
+    const list = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as CheckIn))
+      .filter((c) => c.kind === "PACKAGE" && c.result === "ACCEPTED")
+      .sort((a, b) => timeMs(b.at) - timeMs(a.at))
+      .slice(0, 8);
+    setRecentCheckins(list);
+  }
+
+  async function checkinPackage(p: TicketPackage, count: number, reason: string) {
+    if (!customer || count < 1 || count > p.remainingSessions || !reason.trim()) return;
     setBusy("pkg-" + p.id);
     setMsg(undefined);
     setError(undefined);
@@ -166,8 +179,44 @@ export default function CheckinAssistPage() {
         groupSize: count,
         forceKind: "PACKAGE",
         targetId: p.id,
+        reason: reason.trim(),
       });
       setMsg(`✅ ${r.message} — đã gửi thông báo cho khách.`);
+      await loadRecentCheckins(customer.id);
+      await search();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function correctCheckin(checkinId: string, mode: "PARTIAL" | "CANCEL", refundCount: number, reason: string) {
+    if (!customer) return;
+    setBusy("correct-" + checkinId);
+    setMsg(undefined);
+    setError(undefined);
+    try {
+      const r = await correctPackageCheckin({ checkinId, mode, refundCount, reason });
+      setMsg(`✅ Đã hoàn ${r.refundCount} lượt. Thẻ hiện còn ${r.remaining} lượt.`);
+      await search();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+
+  async function extendTicket(kind: "MEMBERSHIP" | "COURSE", serviceId: string, addDays: number, addSessions: number, reason: string) {
+    if (!customer) return;
+    setBusy("extend-" + serviceId);
+    setMsg(undefined);
+    setError(undefined);
+    try {
+      await extendService({ kind, serviceId, addDays, addSessions, reason });
+      setMsg("✅ Đã gia hạn và lưu lý do.");
+      await search();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -288,13 +337,16 @@ export default function CheckinAssistPage() {
                   title={`MS${m.memberCode} · ${m.holderName}`}
                   subtitle={`Hết hạn ${formatDate(m.endDate)} · ${m.audience}`}
                   action={
-                    <button
-                      onClick={() => checkinMembership(m)}
-                      disabled={busy === "mem-" + m.id}
-                      className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                    >
-                      {busy === "mem-" + m.id ? "..." : "Điểm danh"}
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => checkinMembership(m)}
+                        disabled={busy === "mem-" + m.id}
+                        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {busy === "mem-" + m.id ? "..." : "Điểm danh"}
+                      </button>
+                      <ExtensionPanel kind="MEMBERSHIP" serviceId={m.id} busy={busy === "extend-" + m.id} allowDays onExtend={extendTicket} />
+                    </div>
                   }
                 />
               ))}
@@ -309,7 +361,20 @@ export default function CheckinAssistPage() {
                   key={p.id}
                   pkg={p}
                   busy={busy === "pkg-" + p.id}
-                  onCheckin={(count) => checkinPackage(p, count)}
+                  onCheckin={(count, reason) => checkinPackage(p, count, reason)}
+                />
+              ))}
+            </Section>
+          )}
+
+          {recentCheckins.length > 0 && (
+            <Section title="Sửa sai điểm danh vé lượt" icon={<Ticket className="size-4 text-red-600" />}>
+              {recentCheckins.map((c) => (
+                <CorrectionCard
+                  key={c.id}
+                  checkin={c}
+                  busy={busy === "correct-" + c.id}
+                  onCorrect={(mode, count, reason) => correctCheckin(c.id, mode, count, reason)}
                 />
               ))}
             </Section>
@@ -325,13 +390,16 @@ export default function CheckinAssistPage() {
                   title={`MS${e.memberCode} · ${e.studentName}`}
                   subtitle={`HLV ${e.coachName} · ${e.attendedSessions ?? 0}/${e.totalSessions} buổi · HH ${formatDate(e.expiryDate)}`}
                   action={
-                    <button
-                      onClick={() => checkinEnrollment(e)}
-                      disabled={busy === "enr-" + e.id}
-                      className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                    >
-                      {busy === "enr-" + e.id ? "..." : "Điểm danh"}
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => checkinEnrollment(e)}
+                        disabled={busy === "enr-" + e.id}
+                        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {busy === "enr-" + e.id ? "..." : "Điểm danh"}
+                      </button>
+                      <ExtensionPanel kind="COURSE" serviceId={e.id} busy={busy === "extend-" + e.id} allowDays allowSessions onExtend={extendTicket} />
+                    </div>
                   }
                 />
               ))}
@@ -353,6 +421,16 @@ function formatPhone(local: string): string {
   if (/^0\d{9}$/.test(local)) return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`;
   return local;
 }
+
+function timeMs(value: unknown): number {
+  if (!value) return 0;
+  if (typeof value === "string") return new Date(value).getTime() || 0;
+  if (typeof value === "object" && value && "toMillis" in value && typeof (value as { toMillis?: unknown }).toMillis === "function") {
+    return ((value as { toMillis: () => number }).toMillis());
+  }
+  return 0;
+}
+
 
 function Section({
   title,
@@ -403,9 +481,10 @@ function PackageCheckin({
 }: {
   pkg: TicketPackage;
   busy: boolean;
-  onCheckin: (count: number) => void;
+  onCheckin: (count: number, reason: string) => void;
 }) {
   const [count, setCount] = useState(1);
+  const [reason, setReason] = useState("");
   const max = pkg.remainingSessions;
   const audLabel =
     pkg.audience === "ADULT"
@@ -427,6 +506,12 @@ function PackageCheckin({
           </div>
         </div>
       </div>
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Lý do xác nhận hộ (bắt buộc)"
+        className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+      />
       <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-2">
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-600">Số lượt cần trừ:</span>
@@ -449,11 +534,116 @@ function PackageCheckin({
           </div>
         </div>
         <button
-          onClick={() => onCheckin(count)}
-          disabled={busy || count < 1 || count > max}
+          onClick={() => onCheckin(count, reason)}
+          disabled={busy || count < 1 || count > max || !reason.trim()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {busy ? "..." : `Trừ ${count} lượt`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ExtensionPanel({
+  kind,
+  serviceId,
+  busy,
+  allowDays = false,
+  allowSessions = false,
+  onExtend,
+}: {
+  kind: "MEMBERSHIP" | "COURSE";
+  serviceId: string;
+  busy: boolean;
+  allowDays?: boolean;
+  allowSessions?: boolean;
+  onExtend: (kind: "MEMBERSHIP" | "COURSE", serviceId: string, addDays: number, addSessions: number, reason: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [days, setDays] = useState(0);
+  const [sessions, setSessions] = useState(0);
+  const [reason, setReason] = useState("");
+  const canSubmit = reason.trim().length >= 3 && ((allowDays && days > 0) || (allowSessions && sessions > 0));
+  if (!open) return <button onClick={() => setOpen(true)} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Gia hạn</button>;
+  return (
+    <div className="w-56 rounded-xl border border-emerald-100 bg-emerald-50 p-2 text-xs">
+      <div className="font-bold text-emerald-900">Gia hạn</div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {allowDays && <label className="text-slate-600">Ngày<input type="number" min={0} value={days} onChange={(e) => setDays(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-white p-2" /></label>}
+        {allowSessions && <label className="text-slate-600">Buổi<input type="number" min={0} value={sessions} onChange={(e) => setSessions(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-white p-2" /></label>}
+      </div>
+      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Lý do bắt buộc" className="mt-2 w-full rounded-lg border border-white p-2" />
+      <div className="mt-2 flex gap-2">
+        <button onClick={() => onExtend(kind, serviceId, days, sessions, reason.trim())} disabled={!canSubmit || busy} className="flex-1 rounded-lg bg-emerald-600 px-2 py-2 font-bold text-white disabled:opacity-50">{busy ? "..." : "Lưu"}</button>
+        <button onClick={() => setOpen(false)} className="rounded-lg bg-white px-2 py-2 font-bold text-slate-500">Đóng</button>
+      </div>
+    </div>
+  );
+}
+
+function CorrectionCard({
+  checkin,
+  busy,
+  onCorrect,
+}: {
+  checkin: CheckIn;
+  busy: boolean;
+  onCorrect: (mode: "PARTIAL" | "CANCEL", count: number, reason: string) => void;
+}) {
+  const original = checkin.groupSize ?? 1;
+  const refunded = checkin.refundedCount ?? 0;
+  const left = Math.max(0, original - refunded);
+  const [count, setCount] = useState(Math.max(1, Math.min(1, left)));
+  const [reason, setReason] = useState("");
+  const disabled = busy || left <= 0 || !reason.trim();
+
+  return (
+    <div className="rounded-xl border border-red-100 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-medium text-slate-900">
+            Đã trừ {original} lượt · còn có thể hoàn {left} lượt
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {formatDate(checkin.at)} · {checkin.correctionStatus === "CANCELLED_OR_FULLY_REFUNDED" ? "Đã hoàn/hủy hết" : checkin.correctionStatus === "PARTIALLY_REFUNDED" ? "Đã hoàn một phần" : "Chưa sửa"}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-[120px_1fr]">
+        <input
+          type="number"
+          min={1}
+          max={left || 1}
+          value={count}
+          onChange={(e) => setCount(Math.max(1, Math.min(left || 1, Number(e.target.value) || 1)))}
+          disabled={left <= 0}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:bg-slate-50"
+        />
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Lý do sửa sai (bắt buộc)"
+          disabled={left <= 0}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={() => onCorrect("PARTIAL", count, reason)}
+          disabled={disabled || count > left}
+          className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? "..." : `Hoàn ${count} lượt`}
+        </button>
+        <button
+          onClick={() => onCorrect("CANCEL", left, reason)}
+          disabled={disabled}
+          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          Hủy cả lần
         </button>
       </div>
     </div>

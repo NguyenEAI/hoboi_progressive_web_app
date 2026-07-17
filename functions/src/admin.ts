@@ -187,3 +187,41 @@ export const deleteOrder = onCall({ region: REGION }, async (req) => {
   });
   return { ok: true };
 });
+
+
+// Owner gửi khuyến mãi/thông báo theo nhóm. Có testPhone để gửi thử an toàn.
+export const sendPromotion = onCall({ region: REGION, cors: true }, async (req) => {
+  requireOwner(req);
+  const ownerUid = req.auth!.uid;
+  const d = req.data as any;
+  const title = String(d.title ?? "").trim();
+  const body = String(d.body ?? "").trim();
+  const audience = String(d.audience ?? "TEST_PHONE");
+  const testPhone = String(d.testPhone ?? "").trim();
+  if (!title || !body) throw new HttpsError("invalid-argument", "Cần nhập tiêu đề và nội dung");
+  const users = await db().collection("users").get();
+  const ids = new Set<string>();
+  users.docs.forEach((doc) => {
+    const u = doc.data();
+    if (["OWNER", "RECEPTIONIST", "COACH"].includes(String(u.role ?? ""))) return;
+    const p = String(u.phone ?? "");
+    if (audience === "TEST_PHONE") { if (testPhone && (p.includes(testPhone) || p.replace(/^\+84/, "0").includes(testPhone))) ids.add(doc.id); }
+    else if (audience === "ALL") ids.add(doc.id);
+    else if (audience === "PARENTS" && (u.role === "PARENT" || Array.isArray(u.childrenIds))) ids.add(doc.id);
+  });
+  if (["PACKAGE", "PASS", "COURSE"].includes(audience)) {
+    const col = audience === "PACKAGE" ? "ticketPackages" : audience === "PASS" ? "memberships" : "enrollments";
+    const snap = await db().collection(col).where("status", "==", "ACTIVE").get();
+    snap.docs.forEach((doc) => { const x = doc.data(); const id = audience === "COURSE" ? (x.parentId || x.studentId) : x.userId; if (id) ids.add(String(id)); });
+  }
+  const list = [...ids].slice(0, 1000);
+  const now = admin.firestore.Timestamp.now();
+  const promoRef = db().collection("promotions").doc();
+  const batch = db().batch();
+  batch.set(promoRef, { id: promoRef.id, title, body, audience, testPhone: testPhone || null, createdBy: ownerUid, createdAt: now, notifiedCount: list.length });
+  list.forEach((uid) => { const ref = db().collection(`users/${uid}/notifications`).doc(); batch.set(ref, { id: ref.id, userId: uid, title, body, type: "GENERAL", read: false, createdAt: now, promotionId: promoRef.id }); });
+  const auditRef = db().collection("auditLogs").doc();
+  batch.set(auditRef, { id: auditRef.id, actorId: ownerUid, action: "SEND_PROMOTION", targetType: "promotion", targetId: promoRef.id, detail: { audience, testPhone: testPhone || null, notifiedCount: list.length }, at: now });
+  await batch.commit();
+  return { ok: true, notified: list.length, promotionId: promoRef.id };
+});

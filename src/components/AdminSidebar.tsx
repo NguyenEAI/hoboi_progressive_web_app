@@ -20,6 +20,7 @@ const GROUPS: { title: string; items: { href: string; label: string; ownerOnly?:
     { href: "/admin/coaches", label: "🏊 Huấn luyện viên", ownerOnly: true },
     { href: "/admin/staff", label: "⚙️ Nhân viên & Quyền", ownerOnly: true },
     { href: "/admin/products", label: "📦 Sản phẩm & Giá", ownerOnly: true },
+    { href: "/admin/promotions", label: "📣 Khuyến mãi", ownerOnly: true },
   ]},
   { title: "Phân tích", items: [
     { href: "/admin/reports", label: "📊 Báo cáo", ownerOnly: true },

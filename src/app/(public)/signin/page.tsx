@@ -24,6 +24,7 @@ export default function SignInPage() {
   const [confirm, setConfirm] = useState<ConfirmationResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+  const phoneRef = useRef<HTMLInputElement>(null);
   const otpRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -36,15 +37,22 @@ export default function SignInPage() {
     return () => clearTimeout(t);
   }, [resendIn]);
 
+  function updatePhone(value: string) {
+    const next = value.replace(/\D/g, "").slice(0, 10);
+    setPhone(next);
+    return next;
+  }
+
   async function sendOtp() {
-    if (!isValidVNPhone10(phone)) {
+    const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
+    if (!isValidVNPhone10(currentPhone)) {
       toast.show("Vui lòng nhập đủ 10 số bắt đầu bằng 0", "error");
       return;
     }
     setBusy(true);
     try {
       const verifier = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
-      const e164 = normalizeVNPhone(phone);
+      const e164 = normalizeVNPhone(currentPhone);
       setConfirm(await signInWithPhoneNumber(auth, e164, verifier));
       setStep("otp");
       setResendIn(60);
@@ -159,8 +167,11 @@ export default function SignInPage() {
                 <span aria-hidden>🇻🇳</span>
               </span>
               <input
+                ref={phoneRef}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                onChange={(e) => updatePhone(e.target.value)}
+                onInput={(e) => updatePhone((e.target as HTMLInputElement).value)}
+                onKeyUp={(e) => updatePhone((e.target as HTMLInputElement).value)}
                 inputMode="numeric"
                 autoComplete="tel"
                 maxLength={10}
@@ -174,7 +185,7 @@ export default function SignInPage() {
 
             <button
               onClick={sendOtp}
-              disabled={busy || !isValidVNPhone10(phone)}
+              disabled={busy}
               className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
             >
               {busy ? "Đang gửi OTP…" : "Gửi mã OTP"}

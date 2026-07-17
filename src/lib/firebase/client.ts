@@ -16,6 +16,11 @@ const firebaseConfig = {
 
 export const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
+
+if (process.env.NEXT_PUBLIC_E2E_DISABLE_APP_VERIFICATION === "1") {
+  auth.settings.appVerificationDisabledForTesting = true;
+}
+
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
 // Cloud Functions khu vực asia-southeast1 (gần VN)

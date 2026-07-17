@@ -7,7 +7,7 @@ import { searchCustomerByPhone, createCustomerByPhone, createCounterSale } from 
 import { usePricing } from "@/lib/hooks/usePricing";
 import { formatVND } from "@/lib/utils";
 import { PACKAGE_SIZES, PASS_DURATIONS, SLOT_START_HOURS, SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
-import type { Audience, Coach, Enrollment, Membership, PackageSize, PassDuration, ProductType, SwimStyle, TicketPackage } from "@/types";
+import type { Audience, Child, Coach, Enrollment, Membership, PackageSize, PassDuration, ProductType, SwimStyle, TicketPackage } from "@/types";
 import { Search, UserPlus, WalletCards, Waves, GraduationCap, Ticket, X } from "lucide-react";
 
 type CustomerHit = {
@@ -16,6 +16,14 @@ type CustomerHit = {
   phone?: string;
   role?: string;
   autoCreated?: boolean;
+};
+
+type Recipient = {
+  kind: "USER" | "CHILD";
+  id: string;
+  name: string;
+  label: string;
+  audience?: Audience;
 };
 
 type SaleItem = {
@@ -51,9 +59,16 @@ export default function CounterSalePage() {
   const [packages, setPackages] = useState<TicketPackage[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loadingCards, setLoadingCards] = useState(false);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [recipient, setRecipient] = useState<Recipient | null>(null);
 
   const total = useMemo(() => items.reduce((sum, item) => sum + item.amountVND, 0), [items]);
   const hasCourse = items.some((item) => item.productType === "SWIM_COURSE");
+  const recipientOptions = useMemo<Recipient[]>(() => {
+    if (!customer) return [];
+    const self: Recipient = { kind: "USER", id: customer.id, name: customer.fullName || displayPhone(customer.phone || phone), label: children.length ? "Bố/mẹ" : "Khách", audience: "ADULT" };
+    return [self, ...children.map((child) => ({ kind: "CHILD" as const, id: child.id, name: child.fullName, label: "Con", audience: child.audience ?? "CHILD_OVER_140" }))];
+  }, [children, customer, phone]);
 
   function normalizePhoneInput(value: string) {
     return value.replace(/[^0-9+]/g, "").slice(0, 13);
@@ -68,7 +83,8 @@ export default function CounterSalePage() {
   async function loadActiveServices(customerId: string) {
     setLoadingCards(true);
     try {
-      const [memSnap, pkgSnap, enrSnap] = await Promise.all([
+      const [childSnap, memSnap, pkgSnap, enrSnap] = await Promise.all([
+        getDocs(collection(db, `users/${customerId}/children`)),
         getDocs(query(collection(db, "memberships"), where("userId", "==", customerId), where("status", "==", "ACTIVE"))),
         getDocs(query(collection(db, "ticketPackages"), where("userId", "==", customerId), where("status", "==", "ACTIVE"))),
         Promise.all([
@@ -76,14 +92,17 @@ export default function CounterSalePage() {
           getDocs(query(collection(db, "enrollments"), where("parentId", "==", customerId), where("status", "==", "ACTIVE"))),
         ]),
       ]);
+      const childList = childSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Child));
+      setChildren(childList);
       setMemberships(memSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Membership)));
       setPackages(pkgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TicketPackage)));
       const [selfEnrolls, childEnrolls] = enrSnap;
       setEnrollments([...selfEnrolls.docs, ...childEnrolls.docs].map((d) => ({ id: d.id, ...d.data() } as Enrollment)));
-      return true;
+      return childList;
     } catch (e) {
       setError(`Đã tìm thấy khách, nhưng chưa tải được vé/lượt/khóa đang còn: ${errorText(e)}`);
-      return false;
+      setChildren([]);
+      return [];
     } finally {
       setLoadingCards(false);
     }
@@ -110,7 +129,8 @@ export default function CounterSalePage() {
       setCustomer(found);
       setShowCreate(false);
       setMessage(found.autoCreated ? "Đã tạo hồ sơ tạm cho khách. Có thể bổ sung tên ngay tại quầy." : "Đã tìm thấy khách.");
-      await loadActiveServices(found.id);
+      const childList = await loadActiveServices(found.id);
+      setRecipient({ kind: "USER", id: found.id, name: found.fullName || displayPhone(found.phone || raw), label: childList.length ? "Bố/mẹ" : "Khách", audience: "ADULT" });
     } catch (e) {
       const code = errorCode(e);
       const text = errorText(e);
@@ -140,6 +160,8 @@ export default function CounterSalePage() {
       setMemberships([]);
       setPackages([]);
       setEnrollments([]);
+      setChildren([]);
+      setRecipient({ kind: "USER", id: result.uid, name: newName.trim(), label: "Khách", audience: "ADULT" });
       setShowCreate(false);
       setMessage(result.alreadyExists ? "Khách đã có trong hệ thống, đã cập nhật tên." : "Đã tạo khách mới. Có thể bán vé/lớp ngay.");
     } catch (e) {
@@ -147,6 +169,10 @@ export default function CounterSalePage() {
     } finally {
       setCreating(false);
     }
+  }
+
+  function selectedAudience(audience?: Audience) {
+    return audience ?? recipient?.audience ?? "ADULT";
   }
 
   function addPass(duration: PassDuration, audience: Audience) {
@@ -200,7 +226,7 @@ export default function CounterSalePage() {
   }
 
   async function payAndActivate() {
-    if (!customer || !items.length) return;
+    if (!customer || !recipient || !items.length) return;
     if (hasCourse && !coachId) {
       setError("Chọn HLV cho khóa học trước khi thu tiền.");
       return;
@@ -213,9 +239,9 @@ export default function CounterSalePage() {
       for (const item of items) {
         const r = await createCounterSale({
           customerId: customer.id,
-          beneficiaryKind: "USER",
-          beneficiaryId: customer.id,
-          beneficiaryName: customer.fullName || displayPhone(customer.phone || phone),
+          beneficiaryKind: recipient.kind,
+          beneficiaryId: recipient.id,
+          beneficiaryName: recipient.name,
           productType: item.productType,
           duration: item.duration,
           packageSize: item.packageSize,
@@ -308,6 +334,25 @@ export default function CounterSalePage() {
                   </div>
                   <span className="rounded-full bg-white px-4 py-2 text-sm font-bold text-brand-700 shadow-sm">Sẵn sàng bán</span>
                 </div>
+                {recipientOptions.length > 1 && (
+                  <div className="mt-4 rounded-3xl bg-white p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase tracking-wider text-brand-700">Mua cho ai?</div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {recipientOptions.map((option) => (
+                        <button
+                          key={`${option.kind}-${option.id}`}
+                          onClick={() => setRecipient(option)}
+                          className={`rounded-2xl border-2 p-3 text-left transition ${recipient?.kind === option.kind && recipient?.id === option.id ? "border-brand-500 bg-brand-50 text-brand-900" : "border-slate-100 bg-white text-slate-600 hover:border-brand-200"}`}
+                        >
+                          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">{option.label}</div>
+                          <div className="mt-1 font-extrabold">{option.name}</div>
+                          <div className="mt-1 text-xs text-slate-500">{audienceLabel(option.audience ?? "ADULT")}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   {loadingCards ? (
                     <div className="col-span-full rounded-2xl bg-white p-3 text-sm font-semibold text-slate-400 shadow-sm">Đang tải vé/lượt/khóa đang còn…</div>
@@ -344,7 +389,7 @@ export default function CounterSalePage() {
               <ServiceGroup icon={<WalletCards className="size-5" />} title="Vé tháng/quý/năm" subtitle="Không giới hạn lượt trong thời hạn">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   {PASS_DURATIONS.map((duration) => (
-                    <ServiceButton key={duration.id} title={duration.label} price={pricing.pass.ADULT[duration.id]} note="Giá người lớn" onClick={() => addPass(duration.id, "ADULT")} />
+                    <ServiceButton key={duration.id} title={duration.label} price={pricing.pass.ADULT[duration.id]} note="Giá người lớn" onClick={() => addPass(duration.id, selectedAudience())} />
                   ))}
                 </div>
               </ServiceGroup>
@@ -352,7 +397,7 @@ export default function CounterSalePage() {
               <ServiceGroup icon={<Ticket className="size-5" />} title="Vé 15/30 lượt" subtitle="Dùng dần, phù hợp khách quen/gia đình">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   {PACKAGE_SIZES.map((size) => (
-                    <ServiceButton key={size.id} title={size.label} price={pricing.package.ADULT[size.id]} note="Giá người lớn" onClick={() => addPackage(size.id, "ADULT")} />
+                    <ServiceButton key={size.id} title={size.label} price={pricing.package.ADULT[size.id]} note="Giá người lớn" onClick={() => addPackage(size.id, selectedAudience())} />
                   ))}
                 </div>
               </ServiceGroup>
@@ -370,6 +415,7 @@ export default function CounterSalePage() {
             <div className="text-sm font-bold text-slate-500">Khách</div>
             <div className="mt-1 font-extrabold text-slate-900">{customer?.fullName || "Chưa chọn khách"}</div>
             <div className="text-xs text-slate-500">{customer ? displayPhone(customer.phone || phone) : "Nhập SĐT để bắt đầu"}</div>
+            {recipient && <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-sm font-bold text-brand-800">Mua cho: {recipient.name} {recipient.kind === "CHILD" ? "(con)" : ""}</div>}
           </div>
 
           <div className="mt-4 space-y-3">
@@ -443,7 +489,7 @@ export default function CounterSalePage() {
 
           <button
             onClick={payAndActivate}
-            disabled={!customer || !items.length || paying || (hasCourse && !coachId)}
+            disabled={!customer || !recipient || !items.length || paying || (hasCourse && !coachId)}
             className="mt-4 w-full rounded-3xl bg-gradient-to-r from-brand-700 to-teal-600 py-4 text-lg font-extrabold text-white shadow-xl shadow-brand-700/25 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none"
           >
             {paying ? "Đang kích hoạt…" : "Đã thu tiền · Kích hoạt ngay"}

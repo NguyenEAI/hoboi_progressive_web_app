@@ -12,3 +12,7 @@ functions/node_modules
 service-account.json
 *service-account*.json
 *-firebase-adminsdk-*.json
+.tmp/
+playwright-report/
+test-results/
+*.tsbuildinfo

@@ -59,11 +59,12 @@ export const issueQrToken = onCall({ region: REGION }, async (req) => {
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Chỉ thiết bị quầy được phát QR");
   const nonce = crypto.randomBytes(16).toString("hex");
+  const requestedCount = Math.max(1, Math.floor(Number((req.data as any)?.requestedCount ?? 1)));
   const now = admin.firestore.Timestamp.now();
   const exp = admin.firestore.Timestamp.fromMillis(now.toMillis() + TTL_MS);
   const ref = db().collection("qrTokens").doc();
-  await ref.set({ id: ref.id, nonce, issuedAt: now, expiresAt: exp, used: false });
-  return { token: `${ref.id}:${nonce}`, expiresAt: exp.toMillis() };
+  await ref.set({ id: ref.id, nonce, issuedAt: now, expiresAt: exp, used: false, requestedCount });
+  return { token: `${ref.id}:${nonce}`, expiresAt: exp.toMillis(), requestedCount };
 });
 
 // ===== Khách quét QR =====
@@ -102,6 +103,8 @@ export const staffCheckinByPhone = onCall({ region: REGION }, async (req) => {
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Không đủ quyền");
   const d = req.data as any;
+  const staffReason = String(d.reason ?? "").trim();
+  if (d.forceKind === "PACKAGE" && !staffReason) throw new HttpsError("invalid-argument", "Cần nhập lý do xác nhận hộ");
   // v2.4 (E1) — dùng helper chung; throw rõ ràng nếu Auth có nhưng Firestore không.
   const parentId = await findUserUidByPhone(String(d.phone ?? ""));
   const result = await db().runTransaction(async (tx) =>
@@ -467,7 +470,7 @@ export const requestCheckin = onCall({ region: REGION }, async (req) => {
   const [tokenId, nonce] = String(d.qrPayload ?? "").split(":");
   if (!tokenId || !nonce) throw new HttpsError("invalid-argument", "QR không hợp lệ");
   if (!d.ticketPackageId) throw new HttpsError("invalid-argument", "Thiếu mã vé");
-  const suggestedCount = Math.max(1, Number(d.suggestedCount ?? 1));
+  let suggestedCount = Math.max(1, Number(d.suggestedCount ?? 1));
 
   const tokenRef = db().doc(`qrTokens/${tokenId}`);
   const pkgRef = db().doc(`ticketPackages/${d.ticketPackageId}`);
@@ -481,6 +484,7 @@ export const requestCheckin = onCall({ region: REGION }, async (req) => {
     if (t.nonce !== nonce) throw new HttpsError("invalid-argument", "QR không khớp");
     if (t.expiresAt.toMillis() < Date.now())
       throw new HttpsError("deadline-exceeded", "QR đã hết hạn, vui lòng quét lại");
+    suggestedCount = Math.max(1, Number(t.requestedCount ?? suggestedCount));
 
     if (!pkg.exists) throw new HttpsError("not-found", "Vé không tồn tại");
     const p = pkg.data()!;
@@ -597,6 +601,119 @@ export const approveCheckin = onCall({ region: REGION }, async (req) => {
       });
   } catch (e) {
     console.warn("notify approveCheckin failed", e);
+  }
+
+  return { ok: true, ...result };
+});
+
+
+// Lễ tân/owner sửa sai điểm danh vé lượt.
+// data: { checkinId, mode: "PARTIAL"|"CANCEL", refundCount?, reason }
+export const correctPackageCheckin = onCall({ region: REGION }, async (req) => {
+  const role = req.auth?.token?.role;
+  if (!["OWNER", "RECEPTIONIST"].includes(role))
+    throw new HttpsError("permission-denied", "Không đủ quyền");
+
+  const { checkinId, mode, refundCount, reason } = req.data as {
+    checkinId: string;
+    mode: "PARTIAL" | "CANCEL";
+    refundCount?: number;
+    reason?: string;
+  };
+  if (!checkinId) throw new HttpsError("invalid-argument", "Thiếu lần điểm danh cần sửa");
+  const cleanReason = String(reason ?? "").trim();
+  if (!cleanReason) throw new HttpsError("invalid-argument", "Vui lòng nhập lý do sửa sai");
+  if (!["PARTIAL", "CANCEL"].includes(String(mode)))
+    throw new HttpsError("invalid-argument", "Kiểu sửa sai không hợp lệ");
+
+  const result = await db().runTransaction(async (tx) => {
+    const checkinRef = db().doc(`checkins/${checkinId}`);
+    const checkinSnap = await tx.get(checkinRef);
+    if (!checkinSnap.exists) throw new HttpsError("not-found", "Không tìm thấy lần điểm danh");
+    const c = checkinSnap.data()!;
+    if (c.kind !== "PACKAGE")
+      throw new HttpsError("failed-precondition", "Chỉ hoàn được điểm danh thẻ lượt");
+    if (c.result !== "ACCEPTED")
+      throw new HttpsError("failed-precondition", "Lần điểm danh này không ở trạng thái đã nhận");
+
+    const originalCount = Number(c.groupSize ?? 1);
+    const alreadyRefunded = Number(c.refundedCount ?? 0);
+    const refundable = originalCount - alreadyRefunded;
+    if (refundable <= 0)
+      throw new HttpsError("failed-precondition", "Lần điểm danh này đã được hoàn hết");
+
+    const count = mode === "CANCEL" ? refundable : Math.max(1, Number(refundCount ?? 0));
+    if (!Number.isFinite(count) || count < 1)
+      throw new HttpsError("invalid-argument", "Số lượt hoàn phải lớn hơn 0");
+    if (count > refundable)
+      throw new HttpsError("failed-precondition", `Chỉ còn ${refundable} lượt có thể hoàn cho lần này`);
+
+    const pkgRef = db().doc(`ticketPackages/${c.refId}`);
+    const pkgSnap = await tx.get(pkgRef);
+    if (!pkgSnap.exists) throw new HttpsError("not-found", "Không tìm thấy thẻ lượt");
+    const p = pkgSnap.data()!;
+    const before = Number(p.remainingSessions ?? 0);
+    const total = Number(p.totalSessions ?? 0);
+    const after = Math.min(total, before + count);
+    const correctionStatus = after >= total || alreadyRefunded + count >= originalCount ? "CANCELLED_OR_FULLY_REFUNDED" : "PARTIALLY_REFUNDED";
+    const correction = {
+      at: admin.firestore.Timestamp.now(),
+      by: req.auth!.uid,
+      role,
+      mode,
+      reason: cleanReason,
+      refundCount: count,
+      beforeRemaining: before,
+      afterRemaining: after,
+    };
+
+    tx.update(pkgRef, {
+      remainingSessions: after,
+      status: after > 0 ? "ACTIVE" : p.status,
+      correctionHistory: admin.firestore.FieldValue.arrayUnion({
+        ...correction,
+        checkinId,
+      }),
+    });
+
+    tx.update(checkinRef, {
+      refundedCount: alreadyRefunded + count,
+      correctionStatus,
+      remainingAfterCorrection: after,
+      corrections: admin.firestore.FieldValue.arrayUnion(correction),
+    });
+
+    tx.set(db().collection("auditLogs").doc(), {
+      actorId: req.auth!.uid,
+      action: mode === "CANCEL" ? "CHECKIN_CANCELLED" : "CHECKIN_PARTIALLY_REFUNDED",
+      targetType: "checkin",
+      targetId: checkinId,
+      detail: {
+        packageId: c.refId,
+        userId: c.userId,
+        refundCount: count,
+        originalCount,
+        refundedBefore: alreadyRefunded,
+        beforeRemaining: before,
+        afterRemaining: after,
+        reason: cleanReason,
+      },
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { userId: c.userId as string, refundCount: count, remaining: after, originalCount, refundedTotal: alreadyRefunded + count };
+  });
+
+  try {
+    await db().collection("users").doc(result.userId).collection("notifications").add({
+      title: "Đã hoàn lại lượt bơi",
+      body: `Hồ bơi đã hoàn lại ${result.refundCount} lượt do thao tác sai. Hiện còn ${result.remaining} lượt.`,
+      type: "GENERAL",
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    console.warn("notify correctPackageCheckin failed", e);
   }
 
   return { ok: true, ...result };

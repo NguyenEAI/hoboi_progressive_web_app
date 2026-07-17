@@ -524,3 +524,64 @@ async function suspendServiceByOrder(orderId: string) {
     if (!q.empty) await batch.commit();
   }
 }
+
+
+// =============== EXTEND SERVICE: gia hạn có lý do ===============
+export const extendService = onCall({ region: REGION, cors: true }, async (req) => {
+  requireStaff(req);
+  const role = req.auth?.token?.role as string | undefined;
+  const actorId = req.auth!.uid;
+  const d = req.data as any;
+  const kind = String(d.kind ?? "");
+  const serviceId = String(d.serviceId ?? "");
+  const reason = String(d.reason ?? "").trim();
+  const addDays = Math.max(0, Math.floor(Number(d.addDays ?? 0)));
+  const addSessions = Math.max(0, Math.floor(Number(d.addSessions ?? 0)));
+  if (!serviceId) throw new HttpsError("invalid-argument", "Thiếu dịch vụ cần gia hạn");
+  if (!reason) throw new HttpsError("invalid-argument", "Cần nhập lý do gia hạn");
+  if (addDays < 1 && addSessions < 1) throw new HttpsError("invalid-argument", "Cần nhập số ngày hoặc số buổi/lượt muốn thêm");
+  const col = kind === "MEMBERSHIP" ? "memberships" : kind === "PACKAGE" ? "ticketPackages" : kind === "COURSE" ? "enrollments" : "";
+  if (!col) throw new HttpsError("invalid-argument", "Loại gia hạn không hợp lệ");
+  const ref = db().doc(`${col}/${serviceId}`);
+  const now = admin.firestore.Timestamp.now();
+  const result = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Không tìm thấy dịch vụ");
+    const cur = snap.data()!;
+    const update: Record<string, unknown> = { extensionHistory: FV.arrayUnion({ at: now, by: actorId, role, reason, addDays, addSessions }), updatedAt: now };
+    if (kind === "MEMBERSHIP") {
+      if (addDays < 1) throw new HttpsError("invalid-argument", "Vé thời hạn cần thêm ngày");
+      const oldEnd = cur.endDate?.toDate ? cur.endDate.toDate() : new Date(cur.endDate ?? Date.now());
+      const base = oldEnd.getTime() > Date.now() ? oldEnd : new Date();
+      const next = new Date(base); next.setDate(next.getDate() + addDays);
+      update.endDate = admin.firestore.Timestamp.fromDate(next);
+      if (cur.status === "EXPIRED") update.status = "ACTIVE";
+      tx.update(ref, update);
+      return { ok: true, kind, endDate: next.toISOString() };
+    }
+    if (kind === "PACKAGE") {
+      if (addSessions < 1) throw new HttpsError("invalid-argument", "Vé lượt cần thêm lượt");
+      const total = Number(cur.totalSessions ?? 0) + addSessions;
+      const remaining = Number(cur.remainingSessions ?? 0) + addSessions;
+      update.totalSessions = total; update.remainingSessions = remaining;
+      if (cur.status === "DEPLETED") update.status = "ACTIVE";
+      tx.update(ref, update);
+      return { ok: true, kind, totalSessions: total, remainingSessions: remaining };
+    }
+    if (kind === "COURSE") {
+      if (addDays > 0) {
+        const oldExpiry = cur.expiryDate?.toDate ? cur.expiryDate.toDate() : new Date(cur.expiryDate ?? Date.now());
+        const base = oldExpiry.getTime() > Date.now() ? oldExpiry : new Date();
+        const next = new Date(base); next.setDate(next.getDate() + addDays);
+        update.expiryDate = admin.firestore.Timestamp.fromDate(next);
+      }
+      if (addSessions > 0) update.totalSessions = Number(cur.totalSessions ?? 0) + addSessions;
+      if (cur.status === "EXPIRED") update.status = "ACTIVE";
+      tx.update(ref, update);
+      return { ok: true, kind };
+    }
+    throw new HttpsError("invalid-argument", "Loại gia hạn không hợp lệ");
+  });
+  await db().collection("auditLogs").add({ actorId, action: "EXTEND_SERVICE", targetType: kind, targetId: serviceId, detail: { reason, addDays, addSessions, result }, at: now });
+  return result;
+});

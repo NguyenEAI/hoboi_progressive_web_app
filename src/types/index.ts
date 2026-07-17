@@ -240,6 +240,19 @@ export interface CheckIn {
   groupSize: number; // số người vào lần này (gói lượt)
   result: CheckInResult;
   reason?: string;
+  refundedCount?: number;
+  correctionStatus?: "PARTIALLY_REFUNDED" | "CANCELLED_OR_FULLY_REFUNDED";
+  remainingAfterCorrection?: number;
+  corrections?: {
+    at: TS;
+    by: string;
+    role?: string;
+    mode: "PARTIAL" | "CANCEL";
+    reason: string;
+    refundCount: number;
+    beforeRemaining: number;
+    afterRemaining: number;
+  }[];
   at: TS;
 }
 

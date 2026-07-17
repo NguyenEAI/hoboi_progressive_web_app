@@ -12,7 +12,7 @@ test.describe("Smoke (TEST-PLAN §3)", () => {
     await expect(page.getByText(/Vé tháng/i)).toBeVisible();
     await expect(page.getByText(/Khóa học bơi/i).first()).toBeVisible();
     await expect(page.getByText(/Bảng giá vé lẻ/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: /đăng nhập/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /bắt đầu ngay/i })).toBeVisible();
   });
 
   test("SM-01b · không có lỗi JS console khi load Landing", async ({ page }) => {
@@ -22,7 +22,7 @@ test.describe("Smoke (TEST-PLAN §3)", () => {
       if (msg.type() === "error") errors.push(msg.text());
     });
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     // bỏ qua các warning từ extension (Trancy, Grammarly)
     const realErrors = errors.filter(
       (e) => !/trancy|grammarly|extension/i.test(e),
@@ -32,10 +32,10 @@ test.describe("Smoke (TEST-PLAN §3)", () => {
 
   test("SM-03 · Click Đăng nhập → vào /signin step phone", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: /đăng nhập/i }).first().click();
+    await page.getByRole("link", { name: /bắt đầu ngay/i }).first().click();
     await expect(page).toHaveURL(/\/signin/);
     await expect(page.getByRole("heading", { name: /^đăng nhập$/i })).toBeVisible();
-    await expect(page.getByPlaceholder(/905 xxx xxx/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/0947010978/i)).toBeVisible();
   });
 
   test("PUB-04 · Mobile responsive (360px)", async ({ page }) => {

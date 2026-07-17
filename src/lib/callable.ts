@@ -42,8 +42,12 @@ export const createCounterSale = call<
 export const confirmPayment = call<{ orderId: string }, { ok: boolean; memberCode: string }>("confirmPayment");
 export const cancelOrder = call<{ orderId: string }, { ok: boolean }>("cancelOrder");
 export const refundOrder = call<{ orderId: string; reason: string }, { ok: boolean }>("refundOrder");
+export const extendService = call<
+  { kind: "MEMBERSHIP" | "PACKAGE" | "COURSE"; serviceId: string; addDays?: number; addSessions?: number; reason: string },
+  { ok: boolean; kind: string; endDate?: string; totalSessions?: number; remainingSessions?: number }
+>("extendService");
 
-export const issueQrToken = call<Record<string, never>, { token: string; expiresAt: number }>("issueQrToken");
+export const issueQrToken = call<{ requestedCount?: number }, { token: string; expiresAt: number; requestedCount?: number }>("issueQrToken");
 export const checkinByQr = call<
   {
     qrPayload: string;
@@ -65,6 +69,7 @@ export const staffCheckinByPhone = call<
     forceKind?: "COURSE" | "PACKAGE" | "MEMBERSHIP";
     // v2.4.2: chỉ định doc cụ thể để skip auto-search, error rõ ràng hơn
     targetId?: string;
+    reason?: string;
   },
   { ok: boolean; kind: string; message: string }
 >("staffCheckinByPhone");
@@ -147,6 +152,11 @@ export const approveCheckin = call<
   { ok: boolean; count: number; remaining: number }
 >("approveCheckin");
 
+export const correctPackageCheckin = call<
+  { checkinId: string; mode: "PARTIAL" | "CANCEL"; refundCount?: number; reason: string },
+  { ok: boolean; refundCount: number; remaining: number; originalCount: number; refundedTotal: number }
+>("correctPackageCheckin");
+
 export const rejectCheckin = call<
   { requestId: string; reason: string },
   { ok: boolean }
@@ -156,3 +166,8 @@ export const cancelCheckinRequest = call<
   { requestId: string },
   { ok: boolean }
 >("cancelCheckinRequest");
+
+export const sendPromotion = call<
+  { title: string; body: string; audience: "TEST_PHONE" | "ALL" | "PACKAGE" | "PASS" | "PARENTS" | "COURSE"; testPhone?: string },
+  { ok: boolean; notified: number; promotionId: string }
+>("sendPromotion");

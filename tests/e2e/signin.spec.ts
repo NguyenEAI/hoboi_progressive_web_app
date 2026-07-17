@@ -1,51 +1,54 @@
-import { test, expect } from "@playwright/test";
+﻿import { test, expect } from "@playwright/test";
 import { TEST_USERS, signIn } from "./helpers/auth";
 
 /**
- * Sign-in flow — TEST-PLAN §4.2
- * Cần test numbers đã setup trong Firebase Console.
+ * Sign-in flow â€” TEST-PLAN Â§4.2
+ * Cáº§n test numbers Ä‘Ã£ setup trong Firebase Console.
  */
-test.describe("Sign-in (TEST-PLAN §4.2)", () => {
-  test("SI-01 · Customer login → vào /home", async ({ page }) => {
+test.describe("Sign-in (TEST-PLAN Â§4.2)", () => {
+  test("SI-01 Â· Customer login â†’ vÃ o /home", async ({ page }) => {
     await signIn(page, TEST_USERS.customer);
     await expect(page).toHaveURL(/\/home/, { timeout: 15_000 });
   });
 
-  test("SI-02 · Login lại (đã có doc) → bỏ qua bước nhập tên", async ({ page }) => {
-    // Lần đầu — nếu user chưa có fullName, sẽ hiện bước name. Skip ở đây vì
-    // giả định Owner đã pre-seed fullName cho test numbers.
+  test("SI-02 Â· Login láº¡i (Ä‘Ã£ cÃ³ doc) â†’ bá» qua bÆ°á»›c nháº­p tÃªn", async ({ page }) => {
+    // Láº§n Ä‘áº§u â€” náº¿u user chÆ°a cÃ³ fullName, sáº½ hiá»‡n bÆ°á»›c name. Skip á»Ÿ Ä‘Ã¢y vÃ¬
+    // giáº£ Ä‘á»‹nh Owner Ä‘Ã£ pre-seed fullName cho test numbers.
     await signIn(page, TEST_USERS.customer);
     await expect(page).toHaveURL(/\/home/, { timeout: 15_000 });
   });
 
-  test("SI-05 · Resend OTP có countdown 60s", async ({ page }) => {
+  test("SI-05 Â· Resend OTP cÃ³ countdown 60s", async ({ page }) => {
     await page.goto("/signin");
-    await page.getByPlaceholder(/905 xxx xxx/i).fill(TEST_USERS.customer.phoneRaw);
-    await page.getByRole("button", { name: /gửi mã otp/i }).click();
-    await expect(page.getByText(/gửi lại sau \d+s/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByPlaceholder(/0947010978/i).fill(TEST_USERS.customer.phoneRaw);
+    await page.getByRole("button", { name: /OTP/i }).click();
+    await expect(page.getByText(/gá»­i láº¡i sau \d+s/i)).toBeVisible({ timeout: 10_000 });
   });
 
-  test("SI-06 · OTP sai → toast lỗi", async ({ page }) => {
+  test("SI-06 Â· OTP sai â†’ toast lá»—i", async ({ page }) => {
     await page.goto("/signin");
-    await page.getByPlaceholder(/905 xxx xxx/i).fill(TEST_USERS.customer.phoneRaw);
-    await page.getByRole("button", { name: /gửi mã otp/i }).click();
+    await page.getByPlaceholder(/0947010978/i).fill(TEST_USERS.customer.phoneRaw);
+    await page.getByRole("button", { name: /OTP/i }).click();
 
-    await expect(page.getByRole("heading", { name: /nhập mã otp/i })).toBeVisible({ timeout: 10_000 });
-    await page.getByPlaceholder("• • • • • •").fill("000000");
-    await page.getByRole("button", { name: /xác nhận$/i }).click();
+    await expect(page.getByRole("heading", { name: /nháº­p mÃ£ otp/i })).toBeVisible({ timeout: 10_000 });
+    await page.getByPlaceholder("â€¢ â€¢ â€¢ â€¢ â€¢ â€¢").fill("000000");
+    await page.getByRole("button", { name: /xÃ¡c nháº­n$/i }).click();
 
-    // toast hoặc message lỗi xuất hiện
+    // toast hoáº·c message lá»—i xuáº¥t hiá»‡n
     await expect(page.locator("text=/invalid|sai|verification|fail/i").first())
       .toBeVisible({ timeout: 10_000 });
   });
 
-  test("SI-09 · Đổi số điện thoại từ step OTP quay về step phone", async ({ page }) => {
+  test("SI-09 Â· Äá»•i sá»‘ Ä‘iá»‡n thoáº¡i tá»« step OTP quay vá» step phone", async ({ page }) => {
     await page.goto("/signin");
-    await page.getByPlaceholder(/905 xxx xxx/i).fill(TEST_USERS.customer.phoneRaw);
-    await page.getByRole("button", { name: /gửi mã otp/i }).click();
-    await expect(page.getByRole("heading", { name: /nhập mã otp/i })).toBeVisible({ timeout: 10_000 });
+    await page.getByPlaceholder(/0947010978/i).fill(TEST_USERS.customer.phoneRaw);
+    await page.getByRole("button", { name: /OTP/i }).click();
+    await expect(page.getByRole("heading", { name: /nháº­p mÃ£ otp/i })).toBeVisible({ timeout: 10_000 });
 
-    await page.getByRole("button", { name: /đổi số điện thoại/i }).click();
-    await expect(page.getByRole("heading", { name: /^đăng nhập$/i })).toBeVisible();
+    await page.getByRole("button", { name: /Ä‘á»•i sá»‘ Ä‘iá»‡n thoáº¡i/i }).click();
+    await expect(page.getByRole("heading", { name: /^Ä‘Äƒng nháº­p$/i })).toBeVisible();
   });
 });
+
+
+

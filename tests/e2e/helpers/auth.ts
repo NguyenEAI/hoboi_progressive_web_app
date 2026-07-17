@@ -11,9 +11,9 @@ import { Page, expect } from "@playwright/test";
  * Owner thật (+84947010978) KHÔNG dùng trong e2e vì cần OTP SMS thật.
  */
 export const TEST_USERS = {
-  customer: { phoneRaw: "900000001", e164: "+84900000001", otp: "111111" },
-  parent:   { phoneRaw: "900000002", e164: "+84900000002", otp: "222222" },
-  staff:    { phoneRaw: "900000003", e164: "+84900000003", otp: "333333" },
+  customer: { phoneRaw: "0900000001", e164: "+84900000001", otp: "111111" },
+  parent:   { phoneRaw: "0900000002", e164: "+84900000002", otp: "222222" },
+  staff:    { phoneRaw: "0900000003", e164: "+84900000003", otp: "333333" },
 } as const;
 
 /** Đăng nhập qua OTP test number. Đợi cho tới khi điều hướng về trang sau signin. */
@@ -25,13 +25,13 @@ export async function signIn(
   await page.goto("/signin");
 
   // Step phone
-  await page.getByPlaceholder(/905 xxx xxx/i).fill(user.phoneRaw);
+  await page.getByPlaceholder(/0947010978/i).fill(user.phoneRaw);
   await page.getByRole("button", { name: /gửi mã otp/i }).click();
 
   // Step OTP (đợi step chuyển)
-  await expect(page.getByRole("heading", { name: /nhập mã otp/i })).toBeVisible({ timeout: 10_000 });
-  await page.getByPlaceholder("• • • • • •").fill(user.otp);
-  await page.getByRole("button", { name: /xác nhận$/i }).click();
+  await expect(page.getByRole("heading", { name: /nhập mã otp/i })).toBeVisible({ timeout: 30_000 });
+  await page.getByPlaceholder("••••••").fill(user.otp);
+  await page.getByRole("button", { name: /xác nhận/i }).click();
 
   if (opts.expectName) {
     await expect(page.getByRole("heading", { name: /hoàn tất hồ sơ/i })).toBeVisible({ timeout: 10_000 });

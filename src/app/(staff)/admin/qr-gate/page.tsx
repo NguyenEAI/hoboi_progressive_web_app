@@ -11,10 +11,11 @@ export default function QrGatePage() {
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [now, setNow] = useState(Date.now());
   const [err, setErr] = useState<string>();
+  const [requestedCount, setRequestedCount] = useState(1);
 
   async function refresh() {
     try {
-      const r = await issueQrToken({});
+      const r = await issueQrToken({ requestedCount });
       setToken(r.token); setExpiresAt(r.expiresAt); setErr(undefined);
     } catch (e) { setErr((e as Error).message); }
   }
@@ -54,6 +55,15 @@ export default function QrGatePage() {
             )}
           </div>
           <div className="mt-6 text-center">
+            <div className="mb-4 rounded-2xl bg-white/15 p-4">
+              <div className="text-sm font-bold opacity-90">Số lượt khách cần xác nhận</div>
+              <div className="mt-2 flex items-center justify-center gap-3">
+                <button onClick={() => setRequestedCount((v) => Math.max(1, v - 1))} className="flex size-10 items-center justify-center rounded-full bg-white/20 text-2xl font-bold">−</button>
+                <span className="w-16 text-center text-4xl font-black tabular-nums">{requestedCount}</span>
+                <button onClick={() => setRequestedCount((v) => Math.min(30, v + 1))} className="flex size-10 items-center justify-center rounded-full bg-white/25 text-2xl font-bold">+</button>
+              </div>
+              <button onClick={refresh} className="mt-3 rounded-xl bg-white px-4 py-2 text-sm font-bold text-brand-800">Tạo lại mã với số lượt này</button>
+            </div>
             <div className="text-2xl font-bold">Mã đổi sau: <span className="tabular-nums">{secondsLeft}s</span></div>
             <div className="mt-2 max-w-md text-base opacity-90">
               Mở app <b>Hồ Bơi Prosper Plaza</b> trên điện thoại → mục <b>Check-in</b> → quét mã này
