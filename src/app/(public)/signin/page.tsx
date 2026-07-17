@@ -25,6 +25,7 @@ export default function SignInPage() {
   const [confirm, setConfirm] = useState<ConfirmationResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const phoneRef = useRef<HTMLInputElement>(null);
   const otpRef = useRef<HTMLInputElement>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
@@ -33,6 +34,11 @@ export default function SignInPage() {
   useEffect(() => {
     if (step === "otp" && otpRef.current) otpRef.current.focus();
   }, [step]);
+
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase();
+    setIsInAppBrowser(/tiktok|bytedance|fbav|fb_iab|instagram|zalo|line|micromessenger/.test(ua));
+  }, []);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -69,7 +75,9 @@ export default function SignInPage() {
     const raw = error instanceof Error ? error.message : String(error);
     const lower = raw.toLowerCase();
     if (lower.includes("auth/captcha-check-failed") || lower.includes("hostname match not found")) {
-      return "App chưa được mở quyền gửi mã OTP trên địa chỉ web này. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
+      return isInAppBrowser
+        ? "Vui lòng mở app bằng Safari/Chrome rồi bấm gửi mã OTP lại. Trình duyệt trong TikTok/Facebook/Zalo có thể chặn mã OTP."
+        : "App chưa được mở quyền gửi mã OTP trên địa chỉ web này. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
     }
     if (lower.includes("auth/too-many-requests")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
     if (lower.includes("auth/invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
@@ -239,6 +247,12 @@ export default function SignInPage() {
             <p className="mt-2 text-[11px] font-medium text-slate-400">
               Nhập đủ 10 số bắt đầu bằng 0 (ví dụ: 0947010978)
             </p>
+
+            {isInAppBrowser && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800">
+                Nếu đang mở từ TikTok/Facebook/Zalo, hãy bấm dấu <b>…</b> rồi chọn <b>Mở bằng Safari/Chrome</b> trước khi nhận mã OTP.
+              </div>
+            )}
 
             <button
               onClick={() => sendOtp()}
