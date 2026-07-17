@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Download, Share, Smartphone, X } from "lucide-react";
 
 type BeforeInstallPromptEvent = Event & {
@@ -25,7 +26,7 @@ function isAndroid() {
   return /android/.test(navigator.userAgent.toLowerCase());
 }
 
-export function InstallAppCard({ compact = false }: { compact?: boolean }) {
+export function InstallAppCard({ compact = false, forceShow = false }: { compact?: boolean; forceShow?: boolean }) {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -59,7 +60,8 @@ export function InstallAppCard({ compact = false }: { compact?: boolean }) {
     return "other";
   }, []);
 
-  if (installed || dismissed) return null;
+  if (installed && !forceShow) return null;
+  if (dismissed && !forceShow) return null;
 
   async function installNow() {
     if (!installPrompt) {
@@ -80,7 +82,7 @@ export function InstallAppCard({ compact = false }: { compact?: boolean }) {
   const steps = phoneType === "ios"
     ? ["Bấm nút Chia sẻ ở thanh dưới Safari", "Chọn Thêm vào Màn hình chính", "Bấm Thêm là xong"]
     : phoneType === "android"
-      ? ["Bấm nút Thêm app nếu thấy hiện", "Nếu chưa thấy, bấm dấu 3 chấm trên Chrome", "Chọn Thêm vào màn hình chính"]
+      ? ["Bấm nút Thêm app vào điện thoại", "Khi điện thoại hỏi, bấm Thêm", "Mở app từ màn hình điện thoại"]
       : ["Mở menu của trình duyệt", "Chọn Thêm vào màn hình chính hoặc Cài đặt app", "Mở app từ màn hình điện thoại"];
 
   return (
@@ -92,12 +94,12 @@ export function InstallAppCard({ compact = false }: { compact?: boolean }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-extrabold text-brand-900">Thêm app vào màn hình điện thoại</h2>
+              <h2 className="text-sm font-extrabold text-brand-900">Cài app vào điện thoại</h2>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                Thêm một lần, lần sau khách/lễ tân mở app như app bình thường.
+                Bấm một nút, điện thoại nào hỗ trợ sẽ hỏi xác nhận để thêm app ngay.
               </p>
             </div>
-            {compact && (
+            {compact && !forceShow && (
               <button onClick={hide} className="rounded-full p-1 text-slate-400 active:bg-slate-100" aria-label="Ẩn hướng dẫn">
                 <X className="size-4" />
               </button>
@@ -110,12 +112,12 @@ export function InstallAppCard({ compact = false }: { compact?: boolean }) {
               className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm active:scale-[0.98]"
             >
               <Download className="size-4" />
-              {installPrompt ? "Thêm app ngay" : "Xem cách thêm"}
+              Thêm app vào điện thoại
             </button>
             {compact && !expanded && (
-              <button onClick={() => setExpanded(true)} className="rounded-2xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
-                Hướng dẫn tay
-              </button>
+              <Link href="/install" className="rounded-2xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600">
+                Mở màn cài app
+              </Link>
             )}
           </div>
 

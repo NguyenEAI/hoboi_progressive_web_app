@@ -14,3 +14,5 @@
 - Äá»£t tiáº¿p theo: thÃªm chá»n sá»‘ lÆ°á»£t trÃªn mÃ n QR vÃ  báº¯t buá»™c lÃ½ do khi lá»… tÃ¢n xÃ¡c nháº­n há»™ vÃ© lÆ°á»£t.
 
 - Thêm th? hu?ng d?n d? khách/l? tân d? dua app h? boi ra màn hình di?n tho?i; có nút thêm nhanh và hu?ng d?n tay cho iPhone/Android.
+
+- Thêm màn cài app riêng d? khách b?m m?t nút; Android hi?n xác nh?n thêm app, máy Apple th?y hu?ng d?n ng?n ngay trong app.
