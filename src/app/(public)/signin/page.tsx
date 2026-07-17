@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
@@ -27,6 +27,8 @@ export default function SignInPage() {
   const [resendIn, setResendIn] = useState(0);
   const phoneRef = useRef<HTMLInputElement>(null);
   const otpRef = useRef<HTMLInputElement>(null);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const sendingOtpRef = useRef(false);
 
   useEffect(() => {
     if (step === "otp" && otpRef.current) otpRef.current.focus();
@@ -38,29 +40,60 @@ export default function SignInPage() {
     return () => clearTimeout(t);
   }, [resendIn]);
 
+  useEffect(() => {
+    return () => {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
+  }, []);
+
   function updatePhone(value: string) {
     const next = value.replace(/\D/g, "").slice(0, 10);
     setPhone(next);
     return next;
   }
 
-  async function sendOtp() {
+  function getRecaptchaVerifier() {
+    if (!recaptchaRef.current) {
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
+    }
+    return recaptchaRef.current;
+  }
+
+  function resetRecaptchaVerifier() {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+  }
+
+  async function sendOtp(retry = true) {
+    if (sendingOtpRef.current) return;
     const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
     if (!isValidVNPhone10(currentPhone)) {
       toast.show("Vui lòng nhập đủ 10 số bắt đầu bằng 0", "error");
       return;
     }
+    sendingOtpRef.current = true;
     setBusy(true);
     try {
-      const verifier = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
       const e164 = normalizeVNPhone(currentPhone);
-      setConfirm(await signInWithPhoneNumber(auth, e164, verifier));
+      setConfirm(await signInWithPhoneNumber(auth, e164, getRecaptchaVerifier()));
       setStep("otp");
       setResendIn(60);
       toast.show(`Đã gửi OTP đến ${e164}`, "success");
     } catch (e) {
-      toast.show((e as Error).message, "error");
-    } finally { setBusy(false); }
+      const message = (e as Error).message;
+      if (retry && message.toLowerCase().includes("recaptcha")) {
+        resetRecaptchaVerifier();
+        sendingOtpRef.current = false;
+        setBusy(false);
+        await sendOtp(false);
+        return;
+      }
+      toast.show(message, "error");
+    } finally {
+      sendingOtpRef.current = false;
+      setBusy(false);
+    }
   }
 
   function landingFor(role?: string) {
@@ -94,8 +127,19 @@ export default function SignInPage() {
     if (!uid || !name.trim()) return;
     setBusy(true);
     try {
-      await setDoc(doc(db, "users", uid), { fullName: name.trim() }, { merge: true });
-      const snap = await getDoc(doc(db, "users", uid));
+      const ref = doc(db, "users", uid);
+      const before = await getDoc(ref);
+      const previous = before.data();
+      await setDoc(ref, {
+        id: uid,
+        fullName: name.trim(),
+        phone: previous?.phone ?? normalizeVNPhone(phone),
+        role: previous?.role ?? "CUSTOMER",
+        active: previous?.active ?? true,
+        createdAt: previous?.createdAt ?? serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      const snap = await getDoc(ref);
       toast.show("Tạo tài khoản thành công 🎉", "success");
       router.replace(landingFor(snap.data()?.role));
     } catch (e) { toast.show((e as Error).message, "error"); } finally { setBusy(false); }
@@ -185,7 +229,7 @@ export default function SignInPage() {
             </p>
 
             <button
-              onClick={sendOtp}
+              onClick={() => sendOtp()}
               disabled={busy}
               className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
             >
@@ -237,7 +281,7 @@ export default function SignInPage() {
               {resendIn > 0 ? (
                 <span className="text-slate-400">Gửi lại sau {resendIn}s</span>
               ) : (
-                <button onClick={sendOtp} className="text-brand-600 hover:text-brand-800 transition-colors">
+                <button onClick={() => sendOtp()} disabled={busy} className="text-brand-600 hover:text-brand-800 transition-colors disabled:text-slate-300">
                   Gửi lại mã OTP
                 </button>
               )}
