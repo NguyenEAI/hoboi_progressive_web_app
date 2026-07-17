@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { WavePattern, FloatingOrbs } from "@/components/Decorations";
 import { SkeletonList } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
+import { InstallAppCard } from "@/components/InstallAppCard";
 import { formatDate, daysUntil } from "@/lib/utils";
 import { PASS_DURATIONS, SWIM_STYLES } from "@/lib/constants";
 import Link from "next/link";
@@ -117,8 +118,13 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* ============ INSTALL APP ============ */}
+      <section className="-mt-4 px-4">
+        <InstallAppCard compact />
+      </section>
+
       {/* ============ ACTIVE SERVICES ============ */}
-      <section className="-mt-4 space-y-3.5 px-4">
+      <section className="mt-4 space-y-3.5 px-4">
         {!servicesLoaded && <SkeletonList count={2} />}
 
         {servicesLoaded && mems.map((m, i) => {

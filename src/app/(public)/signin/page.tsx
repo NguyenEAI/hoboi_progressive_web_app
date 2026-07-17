@@ -9,6 +9,7 @@ import { WavePattern, FloatingOrbs } from "@/components/Decorations";
 import { POOL_INFO } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 import { normalizeVNPhone, isValidVNPhone10 } from "@/lib/phone";
+import { InstallAppCard } from "@/components/InstallAppCard";
 import { ArrowLeft, ShieldCheck, Phone, KeyRound, User as UserIcon } from "lucide-react";
 
 type Step = "phone" | "otp" | "name";
@@ -271,6 +272,10 @@ export default function SignInPage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="mt-4">
+        <InstallAppCard compact />
       </div>
 
       <div id="recaptcha" />
