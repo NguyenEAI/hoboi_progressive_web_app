@@ -26,6 +26,7 @@ export default function SignInPage() {
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+  const [otpHelp, setOtpHelp] = useState<string>("");
   const phoneRef = useRef<HTMLInputElement>(null);
   const otpRef = useRef<HTMLInputElement>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
@@ -71,13 +72,17 @@ export default function SignInPage() {
     recaptchaRef.current = null;
   }
 
+  function currentWebAddress() {
+    if (typeof window === "undefined") return "không rõ";
+    return window.location.hostname || window.location.origin || "không rõ";
+  }
+
   function otpErrorMessage(error: unknown) {
     const raw = error instanceof Error ? error.message : String(error);
     const lower = raw.toLowerCase();
     if (lower.includes("auth/captcha-check-failed") || lower.includes("hostname match not found")) {
-      return isInAppBrowser
-        ? "Vui lòng mở app bằng Safari/Chrome rồi bấm gửi mã OTP lại. Trình duyệt trong TikTok/Facebook/Zalo có thể chặn mã OTP."
-        : "App chưa được mở quyền gửi mã OTP trên địa chỉ web này. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
+      const host = currentWebAddress();
+      return `Địa chỉ web này chưa được mở quyền gửi mã OTP: ${host}. Vui lòng chụp màn hình này gửi lễ tân để hồ bơi mở quyền.`;
     }
     if (lower.includes("auth/too-many-requests")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
     if (lower.includes("auth/invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
@@ -93,6 +98,7 @@ export default function SignInPage() {
       return;
     }
     sendingOtpRef.current = true;
+    setOtpHelp("");
     setBusy(true);
     try {
       const e164 = normalizeVNPhone(currentPhone);
@@ -109,6 +115,7 @@ export default function SignInPage() {
         await sendOtp(false);
         return;
       }
+      setOtpHelp(message);
       toast.show(message, "error");
     } finally {
       sendingOtpRef.current = false;
@@ -251,6 +258,12 @@ export default function SignInPage() {
             {isInAppBrowser && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800">
                 Nếu đang mở từ TikTok/Facebook/Zalo, hãy bấm dấu <b>…</b> rồi chọn <b>Mở bằng Safari/Chrome</b> trước khi nhận mã OTP.
+              </div>
+            )}
+
+            {otpHelp && (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold leading-relaxed text-rose-800">
+                {otpHelp}
               </div>
             )}
 
