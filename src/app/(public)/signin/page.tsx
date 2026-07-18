@@ -1,6 +1,18 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
-import { RecaptchaVerifier, signInAnonymously, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  linkWithCredential,
+  RecaptchaVerifier,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signInWithPhoneNumber,
+  updatePassword,
+  type ConfirmationResult,
+  type User,
+} from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
@@ -10,59 +22,57 @@ import { POOL_INFO } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 import { normalizeVNPhone, isValidVNPhone10 } from "@/lib/phone";
 import { InstallAppCard } from "@/components/InstallAppCard";
-import { ArrowLeft, ShieldCheck, Phone, KeyRound, User as UserIcon } from "lucide-react";
+import { ArrowLeft, KeyRound, LockKeyhole, Phone, ShieldCheck, UserPlus } from "lucide-react";
 
-type Step = "phone" | "otp" | "name";
+type Mode = "login" | "signup" | "forgot" | "reset";
+
+function phoneLoginEmail(phone: string) {
+  return `phone-${normalizeVNPhone(phone).replace(/\D/g, "")}@login.hoboiapp.com`;
+}
+
+function passwordErrorMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+  if (lower.includes("invalid-credential") || lower.includes("wrong-password") || lower.includes("user-not-found")) {
+    return "Số điện thoại hoặc mật khẩu chưa đúng.";
+  }
+  if (lower.includes("email-already-in-use")) {
+    return "Số điện thoại này đã có tài khoản. Vui lòng đăng nhập hoặc chọn Quên mật khẩu.";
+  }
+  if (lower.includes("weak-password")) return "Mật khẩu cần có ít nhất 6 ký tự.";
+  if (lower.includes("too-many-requests")) return "Bạn thử quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
+  if (lower.includes("network")) return "Mạng đang chập chờn. Vui lòng kiểm tra mạng rồi thử lại.";
+  return "Chưa thực hiện được lúc này. Vui lòng thử lại hoặc báo lễ tân hỗ trợ.";
+}
 
 export default function SignInPage() {
   const router = useRouter();
   const toast = useToast();
-  const [step, setStep] = useState<Step>("phone");
+  const [mode, setMode] = useState<Mode>("login");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [uid, setUid] = useState<string>();
   const [confirm, setConfirm] = useState<ConfirmationResult | null>(null);
+  const [verifiedPhoneUser, setVerifiedPhoneUser] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
-  const [resendIn, setResendIn] = useState(0);
-  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
-  const [otpHelp, setOtpHelp] = useState<string>("");
   const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [help, setHelp] = useState("");
   const phoneRef = useRef<HTMLInputElement>(null);
-  const otpRef = useRef<HTMLInputElement>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-  const sendingOtpRef = useRef(false);
+
+  const needsOtp = mode === "forgot";
+  const isPasswordMode = mode === "login" || mode === "signup" || mode === "reset";
 
   useEffect(() => {
-    if (step === "otp" && otpRef.current) otpRef.current.focus();
-  }, [step]);
-
-  useEffect(() => {
-    const ua = navigator.userAgent.toLowerCase();
-    const vendor = navigator.vendor.toLowerCase();
-    const isIOS = /iphone|ipad|ipod/.test(ua);
-    const isKnownChatApp = /tiktok|bytedance|fbav|fb_iab|fban|fbios|instagram|zalo|zalokit|line|micromessenger/.test(ua);
-    const isIOSWebView = isIOS && /apple/.test(vendor) && !/version\/\d+.*safari/.test(ua) && !/crios|fxios|edgios/.test(ua);
-    setIsInAppBrowser(isKnownChatApp || isIOSWebView);
-  }, []);
-
-  useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendIn]);
-
-  useEffect(() => {
-    if (step !== "phone") return;
+    if (!needsOtp) return;
     const timer = window.setTimeout(() => getRecaptchaVerifier(), 0);
     return () => window.clearTimeout(timer);
-  }, [step]);
+  }, [needsOtp]);
 
-  useEffect(() => {
-    return () => {
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-    };
+  useEffect(() => () => {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
   }, []);
 
   function updatePhone(value: string) {
@@ -71,21 +81,27 @@ export default function SignInPage() {
     return next;
   }
 
+  function resetCaptcha() {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+    setCaptchaVerified(false);
+  }
+
   function getRecaptchaVerifier() {
     if (!recaptchaRef.current) {
       recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha", {
         size: "normal",
         callback: () => {
           setCaptchaVerified(true);
-          setOtpHelp("");
+          setHelp("");
         },
         "expired-callback": () => {
           setCaptchaVerified(false);
-          setOtpHelp("Ô xác nhận bảo mật đã hết hạn. Vui lòng tick lại trước khi gửi mã.");
+          setHelp("Ô xác nhận bảo mật đã hết hạn. Vui lòng tick lại.");
         },
         "error-callback": () => {
           setCaptchaVerified(false);
-          setOtpHelp("Ô xác nhận bảo mật chưa tải được. Vui lòng tải lại trang rồi thử lại.");
+          setHelp("Ô xác nhận bảo mật chưa tải được. Vui lòng tải lại trang rồi thử lại.");
         },
       });
       recaptchaRef.current.render().catch(() => setCaptchaVerified(false));
@@ -93,75 +109,178 @@ export default function SignInPage() {
     return recaptchaRef.current;
   }
 
-  function resetRecaptchaVerifier() {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
-    setCaptchaVerified(false);
+  function changeMode(next: Mode) {
+    resetCaptcha();
+    setMode(next);
+    setHelp("");
+    setCode("");
+    setConfirm(null);
+    setVerifiedPhoneUser(null);
+    setPassword("");
+    setPasswordConfirm("");
   }
 
-  function currentWebAddress() {
-    if (typeof window === "undefined") return "không rõ";
-    return window.location.hostname || window.location.origin || "không rõ";
-  }
-
-  function otpErrorText(error: unknown) {
-    if (!error) return "";
-    if (typeof error === "string") return error;
-    if (error instanceof Error) return `${error.name} ${error.message}`;
-    try {
-      const record = error as Record<string, unknown>;
-      return JSON.stringify({
-        code: record.code,
-        message: record.message,
-        name: record.name,
-        customData: record.customData,
-      });
-    } catch {
-      return String(error);
-    }
-  }
-
-  function otpSupportCode() {
-    if (typeof window === "undefined") return "OTP";
-    return `OTP-${window.location.hostname}-${new Date().toISOString().slice(11, 16)}`;
-  }
-
-  function otpErrorMessage(error: unknown) {
-    const raw = otpErrorText(error);
-    const lower = raw.toLowerCase();
-    if (lower.includes("auth/captcha-check-failed") || lower.includes("hostname match not found")) {
-      const host = currentWebAddress();
-      return `Địa chỉ web này chưa được mở quyền gửi mã OTP: ${host}. Vui lòng chụp màn hình này gửi lễ tân để hồ bơi mở quyền.`;
-    }
-    if (lower.includes("too-many-requests") || lower.includes("too many")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ 10–15 phút rồi thử lại, đừng bấm gửi liên tục.";
-    if (lower.includes("invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
-    if (lower.includes("quota-exceeded")) return "Hôm nay hệ thống gửi mã quá nhiều. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
-    if (lower.includes("network-request-failed") || lower.includes("timeout") || lower.includes("network")) return "Mạng đang chập chờn nên chưa gửi được mã. Vui lòng kiểm tra mạng rồi thử lại.";
-    if (lower.includes("operation-not-allowed")) return "Chức năng gửi mã OTP chưa bật đúng. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
-    if (lower.includes("web-storage-unsupported") || lower.includes("storage")) return `Trình duyệt đang chặn lưu tạm bước xác thực. Vui lòng tải lại trang hoặc mở bằng Chrome/Safari bình thường rồi gửi mã lại. Mã hỗ trợ: ${otpSupportCode()}`;
-    if (
-      lower.includes("error-code:-39") ||
-      lower.includes("auth/error-code:-39") ||
-      lower.includes("invalid-app-credential") ||
-      lower.includes("missing-app-credential") ||
-      lower.includes("app-not-authorized") ||
-      lower.includes("recaptcha") ||
-      lower.includes("captcha")
-    ) {
-      if (isInAppBrowser) return `Bước bảo mật gửi mã chưa qua. Vui lòng tick vào ô xác nhận bảo mật trên màn hình; nếu vẫn lỗi, bấm dấu ... rồi chọn Mở bằng Safari/Chrome. Mã hỗ trợ: ${otpSupportCode()}`;
-      return `Bước bảo mật gửi mã chưa qua. Vui lòng tick vào ô xác nhận bảo mật trên màn hình rồi bấm gửi mã lại. Nếu vẫn lỗi, chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
-    }
-    return `Chưa gửi được mã OTP. Vui lòng chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
-  }
-
-  async function enterTemporaryAccess() {
+  function checkPhone() {
     const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
     if (!isValidVNPhone10(currentPhone)) {
-      setOtpHelp("Vui lòng nhập đủ số điện thoại trước khi vào tạm.");
+      setHelp("Vui lòng nhập đủ 10 số điện thoại bắt đầu bằng 0.");
+      return null;
+    }
+    return currentPhone;
+  }
+
+  async function ensureCustomerProfile(user: User, currentPhone: string) {
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        id: user.uid,
+        fullName: "",
+        phone: normalizeVNPhone(currentPhone),
+        role: "CUSTOMER",
+        active: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
+
+  async function loginWithPassword() {
+    const currentPhone = checkPhone();
+    if (!currentPhone) return;
+    if (!password) {
+      setHelp("Vui lòng nhập mật khẩu.");
       return;
     }
     setBusy(true);
-    setOtpHelp("");
+    setHelp("");
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
+      await ensureCustomerProfile(user, currentPhone);
+      const profile = await getDoc(doc(db, "users", user.uid));
+      const role = profile.data()?.role;
+      toast.show("Chào mừng trở lại! 🌊", "success");
+      router.replace(role === "OWNER" || role === "RECEPTIONIST" ? "/admin" : role === "COACH" ? "/coach" : "/home");
+    } catch (e) {
+      setHelp(passwordErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createPasswordAccount() {
+    const currentPhone = checkPhone();
+    if (!currentPhone) return;
+    if (password.length < 6) {
+      setHelp("Mật khẩu cần có ít nhất 6 ký tự.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setHelp("Hai lần nhập mật khẩu chưa giống nhau.");
+      return;
+    }
+    setBusy(true);
+    setHelp("");
+    try {
+      const { user } = await createUserWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
+      await setDoc(doc(db, "users", user.uid), {
+        id: user.uid,
+        fullName: "",
+        phone: normalizeVNPhone(currentPhone),
+        role: "CUSTOMER",
+        active: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      toast.show("Tạo tài khoản thành công", "success");
+      router.replace("/profile");
+    } catch (e) {
+      setHelp(passwordErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendResetOtp() {
+    const currentPhone = checkPhone();
+    if (!currentPhone) return;
+    if (!captchaVerified) {
+      setHelp("Vui lòng tick vào ô xác nhận bảo mật trước khi gửi mã.");
+      return;
+    }
+    setBusy(true);
+    setHelp("");
+    try {
+      const result = await signInWithPhoneNumber(auth, normalizeVNPhone(currentPhone), getRecaptchaVerifier());
+      setConfirm(result);
+      resetCaptcha();
+      setHelp("Nhập mã 6 số đã gửi đến điện thoại để đặt mật khẩu mới.");
+    } catch (e) {
+      resetCaptcha();
+      window.setTimeout(() => getRecaptchaVerifier(), 300);
+      setHelp("Chưa gửi được mã xác nhận. Vui lòng thử lại sau hoặc dùng lối vào tạm thời.");
+      console.error("Password reset OTP failed", e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyResetOtp() {
+    if (!confirm || code.length !== 6) {
+      setHelp("Vui lòng nhập đủ 6 số trong mã xác nhận.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await confirm.confirm(code);
+      setVerifiedPhoneUser(result.user);
+      setMode("reset");
+      setCode("");
+      setHelp("Đặt mật khẩu mới cho số điện thoại này.");
+    } catch {
+      setHelp("Mã xác nhận chưa đúng hoặc đã hết hạn.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishPasswordReset() {
+    const currentPhone = checkPhone();
+    if (!currentPhone || !verifiedPhoneUser) return;
+    if (password.length < 6) {
+      setHelp("Mật khẩu cần có ít nhất 6 ký tự.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setHelp("Hai lần nhập mật khẩu chưa giống nhau.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const hasPassword = verifiedPhoneUser.providerData.some((item) => item.providerId === "password");
+      if (hasPassword) {
+        await updatePassword(verifiedPhoneUser, password);
+      } else {
+        await linkWithCredential(verifiedPhoneUser, EmailAuthProvider.credential(phoneLoginEmail(currentPhone), password));
+      }
+      await ensureCustomerProfile(verifiedPhoneUser, currentPhone);
+      toast.show("Đã đặt mật khẩu mới", "success");
+      router.replace("/home");
+    } catch (e) {
+      const raw = e instanceof Error ? e.message.toLowerCase() : "";
+      setHelp(raw.includes("credential-already-in-use")
+        ? "Số này đã có mật khẩu ở một tài khoản khác. Vui lòng báo lễ tân để ghép tài khoản."
+        : passwordErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function enterTemporaryAccess() {
+    const currentPhone = checkPhone();
+    if (!currentPhone) return;
+    setBusy(true);
+    setHelp("");
     try {
       const { user } = await signInAnonymously(auth);
       await setDoc(doc(db, "users", user.uid), {
@@ -174,126 +293,35 @@ export default function SignInPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      toast.show("Đã vào app tạm thời", "success");
       router.replace("/home");
-    } catch (e) {
-      console.error("Temporary customer access failed", e);
-      setOtpHelp("Chưa vào tạm được. Vui lòng báo lễ tân hỗ trợ khách vào app.");
+    } catch {
+      setHelp("Chưa vào tạm được. Vui lòng báo lễ tân hỗ trợ.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function sendOtp() {
-    if (sendingOtpRef.current) return;
-    const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
-    if (!isValidVNPhone10(currentPhone)) {
-      toast.show("Vui lòng nhập đủ 10 số bắt đầu bằng 0", "error");
-      return;
-    }
-    if (!captchaVerified) {
-      setOtpHelp("Vui lòng tick vào ô xác nhận bảo mật trước khi gửi mã OTP.");
-      return;
-    }
-    sendingOtpRef.current = true;
-    setOtpHelp("");
-    setBusy(true);
-    try {
-      const e164 = normalizeVNPhone(currentPhone);
-      setConfirm(await signInWithPhoneNumber(auth, e164, getRecaptchaVerifier()));
-      resetRecaptchaVerifier();
-      setStep("otp");
-      setResendIn(60);
-      toast.show(`Đã gửi OTP đến ${e164}`, "success");
-    } catch (e) {
-      console.error("OTP send failed", {
-        phone: currentPhone.replace(/\d(?=\d{3})/g, "*"),
-        inAppBrowser: isInAppBrowser,
-        host: currentWebAddress(),
-        detail: otpErrorText(e),
-      });
-      const message = otpErrorMessage(e);
-      resetRecaptchaVerifier();
-      setTimeout(() => getRecaptchaVerifier(), 300);
-      setOtpHelp(message);
-    } finally {
-      sendingOtpRef.current = false;
-      setBusy(false);
-    }
-  }
-
-  function landingFor(role?: string) {
-    if (role === "OWNER" || role === "RECEPTIONIST") return "/admin";
-    if (role === "COACH") return "/coach";
-    return "/home";
-  }
-
-  async function verifyOtp() {
-    setBusy(true);
-    try {
-      const cred = await confirm!.confirm(code);
-      const u = cred.user;
-      setUid(u.uid);
-      await u.getIdToken(true);
-      const snap = await getDoc(doc(db, "users", u.uid));
-      if (snap.exists()) {
-        const existingName = (snap.data().fullName as string) ?? "";
-        const role = snap.data().role as string;
-        if (existingName.trim()) {
-          toast.show("Chào mừng trở lại! 🌊", "success");
-          router.replace(landingFor(role));
-          return;
-        }
-      }
-      setStep("name");
-    } catch (e) { toast.show((e as Error).message, "error"); } finally { setBusy(false); }
-  }
-
-  async function saveName() {
-    if (!uid || !name.trim()) return;
-    setBusy(true);
-    try {
-      const ref = doc(db, "users", uid);
-      const before = await getDoc(ref);
-      const previous = before.data();
-      await setDoc(ref, {
-        id: uid,
-        fullName: name.trim(),
-        phone: previous?.phone ?? normalizeVNPhone(phone),
-        role: previous?.role ?? "CUSTOMER",
-        active: previous?.active ?? true,
-        createdAt: previous?.createdAt ?? serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-      const snap = await getDoc(ref);
-      toast.show("Tạo tài khoản thành công 🎉", "success");
-      router.replace(landingFor(snap.data()?.role));
-    } catch (e) { toast.show((e as Error).message, "error"); } finally { setBusy(false); }
-  }
-
-  const stepIndex = step === "phone" ? 0 : step === "otp" ? 1 : 2;
-  const stepIcon = step === "phone" ? Phone : step === "otp" ? KeyRound : UserIcon;
-  const StepIcon = stepIcon;
+  const title = mode === "login" ? "Đăng nhập" : mode === "signup" ? "Tạo tài khoản" : mode === "forgot" ? "Quên mật khẩu" : "Đặt mật khẩu mới";
+  const subtitle = mode === "login"
+    ? "Dùng số điện thoại và mật khẩu để vào app"
+    : mode === "signup"
+      ? "Tạo mật khẩu một lần, lần sau không cần chờ mã OTP"
+      : mode === "forgot"
+        ? "Mã OTP chỉ dùng để xác nhận khi đặt lại mật khẩu"
+        : "Mật khẩu mới sẽ dùng cho các lần đăng nhập sau";
+  const Icon = isPasswordMode ? LockKeyhole : KeyRound;
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-md flex-col px-6 pb-10 pt-8">
-      {/* Animated decoration */}
       <div className="absolute inset-x-0 top-0 -z-10 h-[300px] overflow-hidden">
         <div className="hero-mesh hero-aurora absolute inset-0 opacity-20" />
         <FloatingOrbs />
-        <div className="pointer-events-none absolute inset-x-0 -bottom-px text-[#f8fafc]">
-          <WavePattern className="h-12 w-full" />
-        </div>
+        <div className="pointer-events-none absolute inset-x-0 -bottom-px text-[#f8fafc]"><WavePattern className="h-12 w-full" /></div>
       </div>
 
-      {step !== "name" && (
-        <button
-          onClick={() => (step === "otp" ? setStep("phone") : router.push("/"))}
-          className="btn-ghost -ml-1.5 self-start text-brand-700 font-bold hover:bg-brand-50"
-        >
-          <ArrowLeft className="size-4" strokeWidth={2.5} /> Quay lại
-        </button>
-      )}
+      <button onClick={() => mode === "login" ? router.push("/") : changeMode("login")} className="btn-ghost -ml-1.5 self-start text-brand-700 font-bold hover:bg-brand-50">
+        <ArrowLeft className="size-4" strokeWidth={2.5} /> Quay lại
+      </button>
 
       <div className="mt-4 flex flex-col items-center text-center animate-fade-up">
         <Logo size={68} glow />
@@ -301,189 +329,69 @@ export default function SignInPage() {
         <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">HT Bảo Lâm</div>
       </div>
 
-      {/* Step indicator */}
-      <div className="mx-auto mt-6 flex w-44 items-center gap-2">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
-              i <= stepIndex ? "bg-brand-500 shadow-[0_0_8px_rgba(5,150,105,0.4)]" : "bg-slate-200"
-            }`}
-          />
-        ))}
-      </div>
-
-      <div className="card-glass mt-5 flex-1 p-6 border border-brand-100/30 shadow-float bg-white/80">
+      <div className="card-glass mt-8 flex-1 p-6 border border-brand-100/30 shadow-float bg-white/80">
         <div className="flex items-center gap-2 text-brand-700">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 shadow-sm border border-brand-100">
-            <StepIcon className="size-4 text-brand-600" />
-          </span>
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
-            Bước {stepIndex + 1}/3
-          </span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 shadow-sm border border-brand-100"><Icon className="size-4 text-brand-600" /></span>
+          <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Tài khoản khách</span>
         </div>
+        <div className="animate-fade-up">
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">{title}</h1>
+          <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">{subtitle}</p>
 
-        {step === "phone" && (
-          <div className="animate-fade-up">
-            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">
-              Đăng nhập
-            </h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              Nhập số điện thoại để nhận mã OTP xác thực
-            </p>
-
-            <label className="mt-6 block text-xs font-bold uppercase tracking-wider text-slate-500">Số điện thoại</label>
-            <div className="mt-1.5 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 shadow-sm transition-all focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10">
-              <span className="flex items-center gap-1.5 border-r border-slate-100 pr-3 text-slate-400 text-sm font-semibold">
-                <span aria-hidden>🇻🇳</span>
-              </span>
-              <input
-                ref={phoneRef}
-                value={phone}
-                onChange={(e) => updatePhone(e.target.value)}
-                onInput={(e) => updatePhone((e.target as HTMLInputElement).value)}
-                onKeyUp={(e) => updatePhone((e.target as HTMLInputElement).value)}
-                inputMode="numeric"
-                autoComplete="tel"
-                maxLength={10}
-                className="w-full bg-transparent py-4 outline-none placeholder:text-slate-300 text-base font-semibold tracking-wide text-slate-800 tab-nums"
-                placeholder="0947010978"
-              />
-            </div>
-            <p className="mt-2 text-[11px] font-medium text-slate-400">
-              Nhập đủ 10 số bắt đầu bằng 0 (ví dụ: 0947010978)
-            </p>
-
-            {isInAppBrowser && (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold leading-relaxed text-rose-800">
-                App đang mở trong khung chat nên dễ bị kẹt mã OTP. Vui lòng bấm dấu <b>…</b> ở góc dưới/phía trên, chọn <b>Mở bằng Safari/Chrome</b> rồi gửi mã lại.
+          {mode !== "reset" && (
+            <>
+              <label className="mt-6 block text-xs font-bold uppercase tracking-wider text-slate-500">Số điện thoại</label>
+              <div className="mt-1.5 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 shadow-sm transition-all focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10">
+                <span className="flex items-center gap-1.5 border-r border-slate-100 pr-3 text-slate-400 text-sm font-semibold">🇻🇳</span>
+                <input ref={phoneRef} value={phone} onChange={(e) => updatePhone(e.target.value)} inputMode="numeric" autoComplete="tel" maxLength={10} className="w-full bg-transparent py-4 outline-none placeholder:text-slate-300 text-base font-semibold tracking-wide text-slate-800 tab-nums" placeholder="0947010978" />
               </div>
-            )}
+              <p className="mt-2 text-[11px] font-medium text-slate-400">Nhập đủ 10 số bắt đầu bằng 0</p>
+            </>
+          )}
 
-            {otpHelp && (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold leading-relaxed text-rose-800">
-                {otpHelp}
+          {isPasswordMode && (
+            <>
+              <label className="mt-5 block text-xs font-bold uppercase tracking-wider text-slate-500">Mật khẩu</label>
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} className="input mt-1.5 py-4 font-semibold text-slate-800" placeholder="Ít nhất 6 ký tự" />
+              {(mode === "signup" || mode === "reset") && <>
+                <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-slate-500">Nhập lại mật khẩu</label>
+                <input value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} type="password" autoComplete="new-password" className="input mt-1.5 py-4 font-semibold text-slate-800" placeholder="Nhập lại mật khẩu" />
+              </>}
+            </>
+          )}
+
+          {mode === "forgot" && (
+            <>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                <p className="mb-2 text-[11px] font-semibold leading-relaxed text-slate-500">Tick ô xác nhận bảo mật trước khi gửi mã đặt lại mật khẩu.</p>
+                <div className="flex min-h-[78px] justify-center overflow-hidden rounded-xl bg-slate-50 px-1 py-2"><div id="recaptcha" /></div>
               </div>
-            )}
+              {confirm && <>
+                <label className="mt-5 block text-xs font-bold uppercase tracking-wider text-slate-500">Mã xác nhận</label>
+                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 text-center text-3xl font-extrabold tracking-[0.5em] text-brand-800 outline-none transition-all focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10" placeholder="••••••" />
+              </>}
+            </>
+          )}
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-semibold leading-relaxed text-slate-500">
-                Nếu thấy ô xác nhận bảo mật, anh/chị tick vào đó trước rồi bấm gửi mã.
-              </p>
-              <div className="flex min-h-[78px] justify-center overflow-hidden rounded-xl bg-slate-50 px-1 py-2">
-                <div id="recaptcha" />
-              </div>
-            </div>
+          {help && <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold leading-relaxed text-rose-800">{help}</div>}
 
-            <button
-              onClick={() => sendOtp()}
-              disabled={busy || !captchaVerified}
-              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {busy ? "Đang gửi OTP…" : captchaVerified ? "Gửi mã OTP" : "Tick xác nhận bảo mật trước"}
-            </button>
+          {mode === "login" && <button onClick={loginWithPassword} disabled={busy} className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide">{busy ? "Đang đăng nhập…" : "Đăng nhập"}</button>}
+          {mode === "signup" && <button onClick={createPasswordAccount} disabled={busy} className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide">{busy ? "Đang tạo tài khoản…" : "Tạo tài khoản"}</button>}
+          {mode === "forgot" && !confirm && <button onClick={sendResetOtp} disabled={busy || !captchaVerified} className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide disabled:cursor-not-allowed disabled:opacity-45">{busy ? "Đang gửi mã…" : captchaVerified ? "Gửi mã đặt lại mật khẩu" : "Tick xác nhận bảo mật trước"}</button>}
+          {mode === "forgot" && confirm && <button onClick={verifyResetOtp} disabled={busy || code.length < 6} className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide">{busy ? "Đang xác nhận…" : "Xác nhận mã"}</button>}
+          {mode === "reset" && <button onClick={finishPasswordReset} disabled={busy} className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide">{busy ? "Đang lưu mật khẩu…" : "Lưu mật khẩu mới"}</button>}
 
-            <button
-              onClick={enterTemporaryAccess}
-              disabled={busy}
-              className="mt-4 w-full text-center text-xs font-bold text-brand-700 underline decoration-brand-300 underline-offset-4 transition-colors hover:text-brand-900 disabled:text-slate-300"
-            >
-              Không nhận được mã? Vào app tạm thời
-            </button>
-            <p className="mt-2 text-center text-[11px] font-medium leading-relaxed text-slate-400">
-              Lối vào tạm không mở lịch sử vé, đơn hàng hoặc thông tin tài khoản cũ. Lễ tân sẽ hỗ trợ ghép lại sau.
-            </p>
+          {mode === "login" && <div className="mt-5 flex items-center justify-between text-xs font-bold">
+            <button onClick={() => changeMode("signup")} className="text-brand-700 hover:text-brand-900">Tạo tài khoản mới</button>
+            <button onClick={() => changeMode("forgot")} className="text-brand-700 hover:text-brand-900">Quên mật khẩu?</button>
+          </div>}
+          {mode === "forgot" && <button onClick={enterTemporaryAccess} disabled={busy} className="mt-5 w-full text-center text-xs font-bold text-brand-700 underline decoration-brand-300 underline-offset-4 disabled:text-slate-300">OTP vẫn lỗi? Vào app tạm thời</button>}
 
-            <p className="mt-5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-400">
-              <ShieldCheck className="size-3.5 text-brand-500" />
-              Bảo mật bằng OTP · Không lưu mật khẩu
-            </p>
-          </div>
-        )}
-
-        {step === "otp" && (
-          <div className="animate-fade-up">
-            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">
-              Nhập mã OTP
-            </h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              Mã xác nhận 6 số đã được gửi tới <b className="text-slate-700 font-semibold">{normalizeVNPhone(phone)}</b>
-            </p>
-
-            <input
-              ref={otpRef}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              className="mt-6 w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 text-center text-3xl font-extrabold tracking-[0.5em] text-brand-800 outline-none transition-all focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-              placeholder="••••••"
-            />
-
-            <button
-              onClick={verifyOtp}
-              disabled={busy || code.length < 6}
-              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
-            >
-              {busy ? "Đang xác nhận…" : "Xác nhận & Tiếp tục"}
-            </button>
-
-            <div className="mt-5 flex items-center justify-between text-xs font-semibold">
-              <button
-                onClick={() => { setStep("phone"); setConfirm(null); setCode(""); }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                Đổi số điện thoại
-              </button>
-              {resendIn > 0 ? (
-                <span className="text-slate-400">Gửi lại sau {resendIn}s</span>
-              ) : (
-                <button
-                  onClick={() => { setConfirm(null); setCode(""); setStep("phone"); }}
-                  disabled={busy}
-                  className="text-brand-600 hover:text-brand-800 transition-colors disabled:text-slate-300"
-                >
-                  Xác nhận bảo mật để gửi lại
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {step === "name" && (
-          <div className="animate-fade-up">
-            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-brand-800">
-              Hoàn tất hồ sơ
-            </h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              Vui lòng cho biết họ và tên để in lên thẻ hội viên
-            </p>
-
-            <label className="mt-6 block text-xs font-bold uppercase tracking-wider text-slate-500">Họ và tên</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-              className="input mt-1.5 py-4 font-semibold text-slate-800"
-              placeholder="Vd: Nguyễn Văn A"
-            />
-
-            <button
-              onClick={saveName}
-              disabled={busy || !name.trim()}
-              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
-            >
-              {busy ? "Đang hoàn tất…" : "Hoàn tất đăng ký"}
-            </button>
-          </div>
-        )}
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-400"><ShieldCheck className="size-3.5 text-brand-500" /> Mật khẩu được bảo vệ · Không lưu trong hồ sơ khách</p>
+        </div>
       </div>
 
-      <div className="mt-4">
-        <InstallAppCard compact />
-      </div>
-
+      <div className="mt-4"><InstallAppCard compact /></div>
     </main>
   );
 }
