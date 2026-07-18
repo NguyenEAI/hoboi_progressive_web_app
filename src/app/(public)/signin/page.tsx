@@ -84,10 +84,21 @@ export default function SignInPage() {
       const host = currentWebAddress();
       return `Địa chỉ web này chưa được mở quyền gửi mã OTP: ${host}. Vui lòng chụp màn hình này gửi lễ tân để hồ bơi mở quyền.`;
     }
-    if (lower.includes("auth/too-many-requests")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
+    if (lower.includes("error-code:-39") || lower.includes("auth/error-code:-39") || lower.includes("invalid-app-credential")) {
+      return "Chưa gửi được mã OTP vì bước kiểm tra bảo mật bị kẹt. Vui lòng tải lại trang, mở bằng Chrome/Safari rồi bấm gửi mã lại sau 1 phút.";
+    }
+    if (lower.includes("auth/too-many-requests")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ 10–15 phút rồi thử lại, đừng bấm gửi liên tục.";
     if (lower.includes("auth/invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
     if (lower.includes("auth/quota-exceeded")) return "Hôm nay hệ thống gửi mã quá nhiều. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
-    return raw;
+    if (lower.includes("network-request-failed") || lower.includes("timeout")) return "Mạng đang chập chờn nên chưa gửi được mã. Vui lòng kiểm tra mạng rồi thử lại.";
+    if (lower.includes("firebase:") || lower.includes("auth/")) return "Chưa gửi được mã OTP lúc này. Vui lòng tải lại trang rồi thử lại; nếu vẫn lỗi, báo lễ tân hỗ trợ.";
+    return "Chưa gửi được mã OTP lúc này. Vui lòng tải lại trang rồi thử lại; nếu vẫn lỗi, báo lễ tân hỗ trợ.";
+  }
+
+  function shouldResetAndRetryOtp(error: unknown) {
+    const raw = error instanceof Error ? error.message : String(error);
+    const lower = raw.toLowerCase();
+    return lower.includes("recaptcha") || lower.includes("captcha") || lower.includes("error-code:-39") || lower.includes("invalid-app-credential");
   }
 
   async function sendOtp(retry = true) {
@@ -108,13 +119,15 @@ export default function SignInPage() {
       toast.show(`Đã gửi OTP đến ${e164}`, "success");
     } catch (e) {
       const message = otpErrorMessage(e);
-      if (retry && message.toLowerCase().includes("recaptcha")) {
+      if (retry && shouldResetAndRetryOtp(e)) {
         resetRecaptchaVerifier();
         sendingOtpRef.current = false;
         setBusy(false);
+        await new Promise((resolve) => window.setTimeout(resolve, 800));
         await sendOtp(false);
         return;
       }
+      resetRecaptchaVerifier();
       setOtpHelp(message);
       toast.show(message, "error");
     } finally {
