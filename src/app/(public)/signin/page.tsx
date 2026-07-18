@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import { RecaptchaVerifier, signInAnonymously, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ export default function SignInPage() {
   const [resendIn, setResendIn] = useState(0);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [otpHelp, setOtpHelp] = useState<string>("");
+  const [captchaVerified, setCaptchaVerified] = useState(false);
   const phoneRef = useRef<HTMLInputElement>(null);
   const otpRef = useRef<HTMLInputElement>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
@@ -52,7 +53,12 @@ export default function SignInPage() {
   }, [resendIn]);
 
   useEffect(() => {
-    getRecaptchaVerifier();
+    if (step !== "phone") return;
+    const timer = window.setTimeout(() => getRecaptchaVerifier(), 0);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+
+  useEffect(() => {
     return () => {
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
@@ -67,8 +73,22 @@ export default function SignInPage() {
 
   function getRecaptchaVerifier() {
     if (!recaptchaRef.current) {
-      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha", { size: "normal" });
-      recaptchaRef.current.render().catch(() => undefined);
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha", {
+        size: "normal",
+        callback: () => {
+          setCaptchaVerified(true);
+          setOtpHelp("");
+        },
+        "expired-callback": () => {
+          setCaptchaVerified(false);
+          setOtpHelp("Ô xác nhận bảo mật đã hết hạn. Vui lòng tick lại trước khi gửi mã.");
+        },
+        "error-callback": () => {
+          setCaptchaVerified(false);
+          setOtpHelp("Ô xác nhận bảo mật chưa tải được. Vui lòng tải lại trang rồi thử lại.");
+        },
+      });
+      recaptchaRef.current.render().catch(() => setCaptchaVerified(false));
     }
     return recaptchaRef.current;
   }
@@ -76,6 +96,7 @@ export default function SignInPage() {
   function resetRecaptchaVerifier() {
     recaptchaRef.current?.clear();
     recaptchaRef.current = null;
+    setCaptchaVerified(false);
   }
 
   function currentWebAddress() {
@@ -133,11 +154,45 @@ export default function SignInPage() {
     return `Chưa gửi được mã OTP. Vui lòng chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
   }
 
+  async function enterTemporaryAccess() {
+    const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
+    if (!isValidVNPhone10(currentPhone)) {
+      setOtpHelp("Vui lòng nhập đủ số điện thoại trước khi vào tạm.");
+      return;
+    }
+    setBusy(true);
+    setOtpHelp("");
+    try {
+      const { user } = await signInAnonymously(auth);
+      await setDoc(doc(db, "users", user.uid), {
+        id: user.uid,
+        fullName: "",
+        phone: normalizeVNPhone(currentPhone),
+        role: "CUSTOMER",
+        active: true,
+        temporaryAccess: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      toast.show("Đã vào app tạm thời", "success");
+      router.replace("/home");
+    } catch (e) {
+      console.error("Temporary customer access failed", e);
+      setOtpHelp("Chưa vào tạm được. Vui lòng báo lễ tân hỗ trợ khách vào app.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendOtp() {
     if (sendingOtpRef.current) return;
     const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
     if (!isValidVNPhone10(currentPhone)) {
       toast.show("Vui lòng nhập đủ 10 số bắt đầu bằng 0", "error");
+      return;
+    }
+    if (!captchaVerified) {
+      setOtpHelp("Vui lòng tick vào ô xác nhận bảo mật trước khi gửi mã OTP.");
       return;
     }
     sendingOtpRef.current = true;
@@ -146,6 +201,7 @@ export default function SignInPage() {
     try {
       const e164 = normalizeVNPhone(currentPhone);
       setConfirm(await signInWithPhoneNumber(auth, e164, getRecaptchaVerifier()));
+      resetRecaptchaVerifier();
       setStep("otp");
       setResendIn(60);
       toast.show(`Đã gửi OTP đến ${e164}`, "success");
@@ -160,7 +216,6 @@ export default function SignInPage() {
       resetRecaptchaVerifier();
       setTimeout(() => getRecaptchaVerifier(), 300);
       setOtpHelp(message);
-      toast.show(message, "error");
     } finally {
       sendingOtpRef.current = false;
       setBusy(false);
@@ -322,13 +377,24 @@ export default function SignInPage() {
 
             <button
               onClick={() => sendOtp()}
-              disabled={busy}
-              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide"
+              disabled={busy || !captchaVerified}
+              className="btn-primary mt-6 w-full py-4 text-sm font-bold tracking-wide disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {busy ? "Đang gửi OTP…" : "Gửi mã OTP"}
+              {busy ? "Đang gửi OTP…" : captchaVerified ? "Gửi mã OTP" : "Tick xác nhận bảo mật trước"}
             </button>
 
-            <p className="mt-6 flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-400">
+            <button
+              onClick={enterTemporaryAccess}
+              disabled={busy}
+              className="mt-4 w-full text-center text-xs font-bold text-brand-700 underline decoration-brand-300 underline-offset-4 transition-colors hover:text-brand-900 disabled:text-slate-300"
+            >
+              Không nhận được mã? Vào app tạm thời
+            </button>
+            <p className="mt-2 text-center text-[11px] font-medium leading-relaxed text-slate-400">
+              Lối vào tạm không mở lịch sử vé, đơn hàng hoặc thông tin tài khoản cũ. Lễ tân sẽ hỗ trợ ghép lại sau.
+            </p>
+
+            <p className="mt-5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-400">
               <ShieldCheck className="size-3.5 text-brand-500" />
               Bảo mật bằng OTP · Không lưu mật khẩu
             </p>
@@ -373,8 +439,12 @@ export default function SignInPage() {
               {resendIn > 0 ? (
                 <span className="text-slate-400">Gửi lại sau {resendIn}s</span>
               ) : (
-                <button onClick={() => sendOtp()} disabled={busy} className="text-brand-600 hover:text-brand-800 transition-colors disabled:text-slate-300">
-                  Gửi lại mã OTP
+                <button
+                  onClick={() => { setConfirm(null); setCode(""); setStep("phone"); }}
+                  disabled={busy}
+                  className="text-brand-600 hover:text-brand-800 transition-colors disabled:text-slate-300"
+                >
+                  Xác nhận bảo mật để gửi lại
                 </button>
               )}
             </div>

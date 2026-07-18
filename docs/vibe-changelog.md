@@ -39,3 +39,7 @@
 - Điều chỉnh lỗi OTP: không chặn nhầm Safari, giữ hướng dẫn mở trình duyệt ngoài và thêm mã hỗ trợ cho lỗi bảo mật gửi mã.
 
 - Đổi bước bảo mật gửi OTP từ chạy ẩn sang hiển thị rõ trên màn đăng nhập để khách tick/xác nhận trước khi gửi mã, giảm lỗi kẹt bảo mật.
+
+- Sửa luồng gửi OTP: nút gửi chỉ bật sau khi khách hoàn tất ô xác nhận bảo mật; hết hạn sẽ tự khoá lại; lỗi chỉ hiện một nơi để không bị trùng.
+
+- Thêm lối vào app tạm cho khách không nhận được OTP: tạo phiên khách riêng, không truy cập lịch sử vé/đơn hàng/tài khoản cũ; lễ tân có thể hỗ trợ ghép lại sau.
