@@ -38,7 +38,11 @@ export default function SignInPage() {
 
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
-    setIsInAppBrowser(/tiktok|bytedance|fbav|fb_iab|instagram|zalo|line|micromessenger/.test(ua));
+    const vendor = navigator.vendor.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(ua);
+    const isKnownChatApp = /tiktok|bytedance|fbav|fb_iab|fban|fbios|instagram|zalo|zalokit|line|micromessenger/.test(ua);
+    const isIOSWebView = isIOS && /apple/.test(vendor) && !/version\/\d+.*safari/.test(ua) && !/crios|fxios|edgios/.test(ua);
+    setIsInAppBrowser(isKnownChatApp || isIOSWebView);
   }, []);
 
   useEffect(() => {
@@ -111,7 +115,7 @@ export default function SignInPage() {
     if (lower.includes("quota-exceeded")) return "Hôm nay hệ thống gửi mã quá nhiều. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
     if (lower.includes("network-request-failed") || lower.includes("timeout") || lower.includes("network")) return "Mạng đang chập chờn nên chưa gửi được mã. Vui lòng kiểm tra mạng rồi thử lại.";
     if (lower.includes("operation-not-allowed")) return "Chức năng gửi mã OTP chưa bật đúng. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
-    if (lower.includes("web-storage-unsupported") || lower.includes("storage")) return "Trình duyệt đang chặn lưu tạm bước xác thực. Vui lòng mở bằng Chrome/Safari bình thường rồi gửi mã lại.";
+    if (lower.includes("web-storage-unsupported") || lower.includes("storage")) return `Trình duyệt đang chặn lưu tạm bước xác thực. Vui lòng tải lại trang hoặc mở bằng Chrome/Safari bình thường rồi gửi mã lại. Mã hỗ trợ: ${otpSupportCode()}`;
     if (
       lower.includes("error-code:-39") ||
       lower.includes("auth/error-code:-39") ||
@@ -121,8 +125,8 @@ export default function SignInPage() {
       lower.includes("recaptcha") ||
       lower.includes("captcha")
     ) {
-      if (isInAppBrowser) return "Zalo/Facebook/TikTok đang chặn bước bảo mật gửi mã. Vui lòng bấm dấu ... ở góc trên, chọn Mở bằng Safari/Chrome rồi gửi mã lại.";
-      return "Bước bảo mật gửi mã bị kẹt. Vui lòng tải lại trang rồi gửi mã lại sau 1 phút.";
+      if (isInAppBrowser) return `Zalo/Facebook/TikTok có thể đang chặn bước bảo mật gửi mã. Vui lòng bấm dấu ... rồi chọn Mở bằng Safari/Chrome. Nếu anh/chị đã mở Safari mà vẫn lỗi, chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
+      return `Bước bảo mật gửi mã bị kẹt. Vui lòng tải lại trang rồi gửi mã lại sau 1 phút. Nếu vẫn lỗi, chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
     }
     return `Chưa gửi được mã OTP. Vui lòng chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
   }
@@ -306,8 +310,8 @@ export default function SignInPage() {
             </p>
 
             {isInAppBrowser && (
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800">
-                Nếu đang mở từ TikTok/Facebook/Zalo, hãy bấm dấu <b>…</b> rồi chọn <b>Mở bằng Safari/Chrome</b> trước khi nhận mã OTP.
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold leading-relaxed text-rose-800">
+                App đang mở trong khung chat nên dễ bị kẹt mã OTP. Vui lòng bấm dấu <b>…</b> ở góc dưới/phía trên, chọn <b>Mở bằng Safari/Chrome</b> rồi gửi mã lại.
               </div>
             )}
 
