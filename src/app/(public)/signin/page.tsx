@@ -52,6 +52,7 @@ export default function SignInPage() {
   }, [resendIn]);
 
   useEffect(() => {
+    getRecaptchaVerifier();
     return () => {
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
@@ -66,7 +67,8 @@ export default function SignInPage() {
 
   function getRecaptchaVerifier() {
     if (!recaptchaRef.current) {
-      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha", { size: "normal" });
+      recaptchaRef.current.render().catch(() => undefined);
     }
     return recaptchaRef.current;
   }
@@ -125,18 +127,13 @@ export default function SignInPage() {
       lower.includes("recaptcha") ||
       lower.includes("captcha")
     ) {
-      if (isInAppBrowser) return `Zalo/Facebook/TikTok có thể đang chặn bước bảo mật gửi mã. Vui lòng bấm dấu ... rồi chọn Mở bằng Safari/Chrome. Nếu anh/chị đã mở Safari mà vẫn lỗi, chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
-      return `Bước bảo mật gửi mã bị kẹt. Vui lòng tải lại trang rồi gửi mã lại sau 1 phút. Nếu vẫn lỗi, chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
+      if (isInAppBrowser) return `Bước bảo mật gửi mã chưa qua. Vui lòng tick vào ô xác nhận bảo mật trên màn hình; nếu vẫn lỗi, bấm dấu ... rồi chọn Mở bằng Safari/Chrome. Mã hỗ trợ: ${otpSupportCode()}`;
+      return `Bước bảo mật gửi mã chưa qua. Vui lòng tick vào ô xác nhận bảo mật trên màn hình rồi bấm gửi mã lại. Nếu vẫn lỗi, chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
     }
     return `Chưa gửi được mã OTP. Vui lòng chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
   }
 
-  function shouldResetAndRetryOtp(error: unknown) {
-    const lower = otpErrorText(error).toLowerCase();
-    return lower.includes("recaptcha") || lower.includes("captcha") || lower.includes("error-code:-39") || lower.includes("invalid-app-credential") || lower.includes("missing-app-credential") || lower.includes("app-not-authorized");
-  }
-
-  async function sendOtp(retry = true) {
+  async function sendOtp() {
     if (sendingOtpRef.current) return;
     const currentPhone = updatePhone(phoneRef.current?.value ?? phone);
     if (!isValidVNPhone10(currentPhone)) {
@@ -160,15 +157,8 @@ export default function SignInPage() {
         detail: otpErrorText(e),
       });
       const message = otpErrorMessage(e);
-      if (retry && shouldResetAndRetryOtp(e)) {
-        resetRecaptchaVerifier();
-        sendingOtpRef.current = false;
-        setBusy(false);
-        await new Promise((resolve) => window.setTimeout(resolve, 800));
-        await sendOtp(false);
-        return;
-      }
       resetRecaptchaVerifier();
+      setTimeout(() => getRecaptchaVerifier(), 300);
       setOtpHelp(message);
       toast.show(message, "error");
     } finally {
@@ -321,6 +311,15 @@ export default function SignInPage() {
               </div>
             )}
 
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+              <p className="mb-2 text-[11px] font-semibold leading-relaxed text-slate-500">
+                Nếu thấy ô xác nhận bảo mật, anh/chị tick vào đó trước rồi bấm gửi mã.
+              </p>
+              <div className="flex min-h-[78px] justify-center overflow-hidden rounded-xl bg-slate-50 px-1 py-2">
+                <div id="recaptcha" />
+              </div>
+            </div>
+
             <button
               onClick={() => sendOtp()}
               disabled={busy}
@@ -415,7 +414,6 @@ export default function SignInPage() {
         <InstallAppCard compact />
       </div>
 
-      <div id="recaptcha" />
     </main>
   );
 }
