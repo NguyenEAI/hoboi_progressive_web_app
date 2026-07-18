@@ -77,28 +77,59 @@ export default function SignInPage() {
     return window.location.hostname || window.location.origin || "không rõ";
   }
 
+  function otpErrorText(error: unknown) {
+    if (!error) return "";
+    if (typeof error === "string") return error;
+    if (error instanceof Error) return `${error.name} ${error.message}`;
+    try {
+      const record = error as Record<string, unknown>;
+      return JSON.stringify({
+        code: record.code,
+        message: record.message,
+        name: record.name,
+        customData: record.customData,
+      });
+    } catch {
+      return String(error);
+    }
+  }
+
+  function otpSupportCode() {
+    if (typeof window === "undefined") return "OTP";
+    return `OTP-${window.location.hostname}-${new Date().toISOString().slice(11, 16)}`;
+  }
+
   function otpErrorMessage(error: unknown) {
-    const raw = error instanceof Error ? error.message : String(error);
+    const raw = otpErrorText(error);
     const lower = raw.toLowerCase();
     if (lower.includes("auth/captcha-check-failed") || lower.includes("hostname match not found")) {
       const host = currentWebAddress();
       return `Địa chỉ web này chưa được mở quyền gửi mã OTP: ${host}. Vui lòng chụp màn hình này gửi lễ tân để hồ bơi mở quyền.`;
     }
-    if (lower.includes("error-code:-39") || lower.includes("auth/error-code:-39") || lower.includes("invalid-app-credential")) {
-      return "Chưa gửi được mã OTP vì bước kiểm tra bảo mật bị kẹt. Vui lòng tải lại trang, mở bằng Chrome/Safari rồi bấm gửi mã lại sau 1 phút.";
+    if (lower.includes("too-many-requests") || lower.includes("too many")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ 10–15 phút rồi thử lại, đừng bấm gửi liên tục.";
+    if (lower.includes("invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
+    if (lower.includes("quota-exceeded")) return "Hôm nay hệ thống gửi mã quá nhiều. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
+    if (lower.includes("network-request-failed") || lower.includes("timeout") || lower.includes("network")) return "Mạng đang chập chờn nên chưa gửi được mã. Vui lòng kiểm tra mạng rồi thử lại.";
+    if (lower.includes("operation-not-allowed")) return "Chức năng gửi mã OTP chưa bật đúng. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
+    if (lower.includes("web-storage-unsupported") || lower.includes("storage")) return "Trình duyệt đang chặn lưu tạm bước xác thực. Vui lòng mở bằng Chrome/Safari bình thường rồi gửi mã lại.";
+    if (
+      lower.includes("error-code:-39") ||
+      lower.includes("auth/error-code:-39") ||
+      lower.includes("invalid-app-credential") ||
+      lower.includes("missing-app-credential") ||
+      lower.includes("app-not-authorized") ||
+      lower.includes("recaptcha") ||
+      lower.includes("captcha")
+    ) {
+      if (isInAppBrowser) return "Zalo/Facebook/TikTok đang chặn bước bảo mật gửi mã. Vui lòng bấm dấu ... ở góc trên, chọn Mở bằng Safari/Chrome rồi gửi mã lại.";
+      return "Bước bảo mật gửi mã bị kẹt. Vui lòng tải lại trang rồi gửi mã lại sau 1 phút.";
     }
-    if (lower.includes("auth/too-many-requests")) return "Số này vừa yêu cầu mã quá nhiều lần. Vui lòng chờ 10–15 phút rồi thử lại, đừng bấm gửi liên tục.";
-    if (lower.includes("auth/invalid-phone-number")) return "Số điện thoại chưa đúng. Vui lòng nhập đủ 10 số bắt đầu bằng 0.";
-    if (lower.includes("auth/quota-exceeded")) return "Hôm nay hệ thống gửi mã quá nhiều. Vui lòng báo lễ tân để hồ bơi kiểm tra lại.";
-    if (lower.includes("network-request-failed") || lower.includes("timeout")) return "Mạng đang chập chờn nên chưa gửi được mã. Vui lòng kiểm tra mạng rồi thử lại.";
-    if (lower.includes("firebase:") || lower.includes("auth/")) return "Chưa gửi được mã OTP lúc này. Vui lòng tải lại trang rồi thử lại; nếu vẫn lỗi, báo lễ tân hỗ trợ.";
-    return "Chưa gửi được mã OTP lúc này. Vui lòng tải lại trang rồi thử lại; nếu vẫn lỗi, báo lễ tân hỗ trợ.";
+    return `Chưa gửi được mã OTP. Vui lòng chụp màn hình này gửi lễ tân. Mã hỗ trợ: ${otpSupportCode()}`;
   }
 
   function shouldResetAndRetryOtp(error: unknown) {
-    const raw = error instanceof Error ? error.message : String(error);
-    const lower = raw.toLowerCase();
-    return lower.includes("recaptcha") || lower.includes("captcha") || lower.includes("error-code:-39") || lower.includes("invalid-app-credential");
+    const lower = otpErrorText(error).toLowerCase();
+    return lower.includes("recaptcha") || lower.includes("captcha") || lower.includes("error-code:-39") || lower.includes("invalid-app-credential") || lower.includes("missing-app-credential") || lower.includes("app-not-authorized");
   }
 
   async function sendOtp(retry = true) {
@@ -118,6 +149,12 @@ export default function SignInPage() {
       setResendIn(60);
       toast.show(`Đã gửi OTP đến ${e164}`, "success");
     } catch (e) {
+      console.error("OTP send failed", {
+        phone: currentPhone.replace(/\d(?=\d{3})/g, "*"),
+        inAppBrowser: isInAppBrowser,
+        host: currentWebAddress(),
+        detail: otpErrorText(e),
+      });
       const message = otpErrorMessage(e);
       if (retry && shouldResetAndRetryOtp(e)) {
         resetRecaptchaVerifier();
