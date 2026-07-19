@@ -1,21 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import { usePricing } from "@/lib/hooks/usePricing";
 import { createOrder } from "@/lib/callable";
+import { uploadPassPhoto, validatePassPhotoFile, type PassPhotoUpload } from "@/lib/passPhoto";
 import { formatVND } from "@/lib/utils";
 import { AUDIENCES, PASS_DURATIONS } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 import { BackButton } from "@/components/BackButton";
 import type { Audience, PassDuration, Child } from "@/types";
-import { Plus, Check, Calendar } from "lucide-react";
+import { Plus, Check, Calendar, Camera, ImagePlus, RotateCcw } from "lucide-react";
 
-type Step = "duration" | "audience" | "beneficiary" | "confirm";
+type Step = "duration" | "audience" | "beneficiary" | "photo" | "confirm";
+
+type PhotoState = {
+  previewUrl: string;
+  upload?: PassPhotoUpload;
+  uploading: boolean;
+  error?: string;
+};
 
 export default function PassWizardPage() {
   const router = useRouter();
@@ -29,6 +37,7 @@ export default function PassWizardPage() {
   const [beneficiary, setBeneficiary] = useState<string | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
   const [busy, setBusy] = useState(false);
+  const [passPhoto, setPassPhoto] = useState<PhotoState | null>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -45,18 +54,54 @@ export default function PassWizardPage() {
   const isChild = beneficiary && beneficiary !== "self";
   const child = children.find((c) => c.id === beneficiary);
   const beneficiaryName = isChild ? child?.fullName ?? "" : profile?.fullName ?? "";
+  const beneficiaryKind = isChild ? "CHILD" : "USER";
+  const beneficiaryId = isChild ? beneficiary ?? "" : profile?.id ?? "";
+  const canConfirm = !!passPhoto?.upload?.storagePath && !passPhoto.uploading && !busy;
+
+  function chooseBeneficiary(next: string) {
+    setBeneficiary(next);
+    setPassPhoto(null);
+    setStep("photo");
+  }
+
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !profile || !beneficiaryId) return;
+    const invalid = validatePassPhotoFile(file);
+    if (invalid) {
+      toast.show(invalid, "error");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setPassPhoto({ previewUrl, uploading: true });
+    try {
+      const upload = await uploadPassPhoto({
+        file,
+        customerId: profile.id,
+        beneficiaryKind,
+        beneficiaryId,
+      });
+      setPassPhoto({ previewUrl, upload, uploading: false });
+    } catch (e) {
+      setPassPhoto({ previewUrl, uploading: false, error: (e as Error).message });
+      toast.show("Upload ảnh thất bại: " + (e as Error).message, "error");
+    }
+  }
 
   async function confirm() {
-    if (!profile || !duration || !audience || !beneficiary) return;
+    if (!profile || !duration || !audience || !beneficiary || !passPhoto?.upload?.storagePath) return;
     setBusy(true);
     try {
       const { orderId, amountVND } = await createOrder({
         productType: "PASS",
         duration,
         audience,
-        beneficiaryKind: isChild ? "CHILD" : "USER",
-        beneficiaryId: isChild ? beneficiary : profile.id,
+        beneficiaryKind,
+        beneficiaryId,
         beneficiaryName,
+        passPhoto: { storagePath: passPhoto.upload.storagePath },
       });
       toast.show(
         `Đã đặt vé ${formatVND(amountVND)} · mã ${orderId.slice(0, 6)}. Đến quầy thanh toán nhé.`,
@@ -146,10 +191,7 @@ export default function PassWizardPage() {
         >
           <BeneficiaryOption
             active={beneficiary === "self"}
-            onClick={() => {
-              setBeneficiary("self");
-              setStep("confirm");
-            }}
+            onClick={() => chooseBeneficiary("self")}
             emoji="🧔"
             title={profile?.fullName || "(Chưa đặt tên)"}
             subtitle="Bản thân"
@@ -158,10 +200,7 @@ export default function PassWizardPage() {
             <BeneficiaryOption
               key={c.id}
               active={beneficiary === c.id}
-              onClick={() => {
-                setBeneficiary(c.id);
-                setStep("confirm");
-              }}
+              onClick={() => chooseBeneficiary(c.id)}
               emoji="🧒"
               title={c.fullName}
               subtitle="Con"
@@ -176,22 +215,67 @@ export default function PassWizardPage() {
         </Section>
       )}
 
+      {step === "photo" && duration && audience && beneficiary && (
+        <Section
+          title="Chụp ảnh thẻ"
+          subtitle="Ảnh thật của đúng người dùng vé, dùng để lễ tân đối chiếu trên thẻ"
+          onBack={() => setStep("beneficiary")}
+        >
+          <div className="rounded-2xl border-2 border-brand-200 bg-white p-4">
+            <div className="text-sm font-bold text-slate-800">{beneficiaryName + (isChild ? " (con)" : "")}</div>
+            <div className="mt-3 overflow-hidden rounded-2xl bg-slate-100">
+              {passPhoto?.previewUrl ? (
+                <img src={passPhoto.previewUrl} alt="Ảnh thẻ đã chọn" className="h-64 w-full object-cover" />
+              ) : (
+                <div className="flex h-64 flex-col items-center justify-center px-6 text-center text-sm text-slate-500">
+                  <Camera className="mb-2 size-9 text-brand-500" />
+                  Cần có ảnh trước khi xác nhận đặt vé thời hạn.
+                </div>
+              )}
+            </div>
+            {passPhoto?.uploading && <p className="mt-2 text-sm font-semibold text-brand-700">Đang upload ảnh…</p>}
+            {passPhoto?.upload && <p className="mt-2 text-sm font-semibold text-emerald-700">Ảnh đã upload thành công.</p>}
+            {passPhoto?.error && <p className="mt-2 text-sm font-semibold text-red-600">{passPhoto.error}</p>}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-brand-600 px-3 py-3 text-sm font-bold text-white shadow-lg shadow-brand-600/20">
+                {passPhoto ? <RotateCcw className="size-4" /> : <Camera className="size-4" />}
+                {passPhoto ? "Chụp lại" : "Chụp ảnh"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={handlePhotoChange} />
+              </label>
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-brand-100 bg-white px-3 py-3 text-sm font-bold text-brand-700">
+                <ImagePlus className="size-4" />
+                Chọn từ máy
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
+              </label>
+            </div>
+          </div>
+          <button
+            onClick={() => setStep("confirm")}
+            disabled={!passPhoto?.upload?.storagePath || passPhoto.uploading}
+            className="btn-primary w-full py-3.5 text-base disabled:opacity-50"
+          >
+            Tiếp tục xác nhận
+          </button>
+        </Section>
+      )}
+
       {step === "confirm" && duration && audience && beneficiary && (
         <Section
           title="Xác nhận đặt vé"
           subtitle="Kiểm tra thông tin trước khi gửi"
-          onBack={() => setStep("beneficiary")}
+          onBack={() => setStep("photo")}
         >
           <div className="space-y-2 rounded-2xl border-2 border-brand-200 bg-brand-50 p-4 text-sm">
             <Row l="Loại" v="Vé thời hạn" />
             <Row l="Thời hạn" v={PASS_DURATIONS.find((d) => d.id === duration)?.label ?? duration} />
             <Row l="Áp dụng giá theo" v={AUDIENCES.find((a) => a.id === audience)?.label ?? audience} />
             <Row l="Người dùng vé" v={beneficiaryName + (isChild ? " (con)" : "")} />
+            <Row l="Ảnh thẻ" v={passPhoto?.upload?.storagePath ? "Đã có" : "Chưa có"} />
             <div className="my-2 border-t border-brand-200" />
             <Row l="Tổng" v={<span className="text-lg font-extrabold text-brand-700">{formatVND(price)}</span>} />
           </div>
 
-          <button onClick={confirm} disabled={busy} className="btn-primary w-full py-3.5 text-base">
+          <button onClick={confirm} disabled={!canConfirm} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
             {busy ? "Đang gửi…" : (
               <>
                 <Check className="size-5" /> Xác nhận đặt vé
@@ -208,7 +292,7 @@ export default function PassWizardPage() {
 }
 
 function StepDots({ step }: { step: Step }) {
-  const order: Step[] = ["duration", "audience", "beneficiary", "confirm"];
+  const order: Step[] = ["duration", "audience", "beneficiary", "photo", "confirm"];
   const idx = order.indexOf(step);
   return (
     <div className="flex items-center justify-center gap-1.5 py-3">

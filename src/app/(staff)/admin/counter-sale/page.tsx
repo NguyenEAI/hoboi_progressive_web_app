@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { searchCustomerByPhone, createCustomerByPhone, createCounterSale } from "@/lib/callable";
 import { usePricing } from "@/lib/hooks/usePricing";
+import { uploadPassPhoto, validatePassPhotoFile, type PassPhotoUpload } from "@/lib/passPhoto";
 import { formatVND } from "@/lib/utils";
 import { PACKAGE_SIZES, PASS_DURATIONS, SLOT_START_HOURS, SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
 import type { Audience, Child, Coach, Enrollment, Membership, PackageSize, PassDuration, ProductType, SwimStyle, TicketPackage } from "@/types";
-import { Search, UserPlus, WalletCards, Waves, GraduationCap, Ticket, X } from "lucide-react";
+import { Camera, ImagePlus, RotateCcw, Search, UserPlus, WalletCards, Waves, GraduationCap, Ticket, X } from "lucide-react";
 
 type CustomerHit = {
   id: string;
@@ -38,6 +39,13 @@ type SaleItem = {
   swimStyle?: SwimStyle;
 };
 
+type PhotoState = {
+  previewUrl: string;
+  upload?: PassPhotoUpload;
+  uploading: boolean;
+  error?: string;
+};
+
 export default function CounterSalePage() {
   const { pricing } = usePricing();
   const [phone, setPhone] = useState("");
@@ -61,9 +69,12 @@ export default function CounterSalePage() {
   const [loadingCards, setLoadingCards] = useState(false);
   const [children, setChildren] = useState<Child[]>([]);
   const [recipient, setRecipient] = useState<Recipient | null>(null);
+  const [passPhoto, setPassPhoto] = useState<PhotoState | null>(null);
 
   const total = useMemo(() => items.reduce((sum, item) => sum + item.amountVND, 0), [items]);
   const hasCourse = items.some((item) => item.productType === "SWIM_COURSE");
+  const hasPass = items.some((item) => item.productType === "PASS");
+  const passPhotoReady = !hasPass || (!!passPhoto?.upload?.storagePath && !passPhoto.uploading);
   const recipientOptions = useMemo<Recipient[]>(() => {
     if (!customer) return [];
     const self: Recipient = { kind: "USER", id: customer.id, name: customer.fullName || displayPhone(customer.phone || phone), label: children.length ? "Bố/mẹ" : "Khách", audience: "ADULT" };
@@ -79,6 +90,10 @@ export default function CounterSalePage() {
       .then((s) => setCoaches(s.docs.map((d) => ({ id: d.id, ...d.data() } as Coach)).filter((c) => c.active)))
       .catch(() => setCoaches([]));
   }, []);
+
+  useEffect(() => {
+    setPassPhoto(null);
+  }, [customer?.id, recipient?.kind, recipient?.id]);
 
   async function loadActiveServices(customerId: string) {
     setLoadingCards(true);
@@ -171,6 +186,34 @@ export default function CounterSalePage() {
     }
   }
 
+  async function handlePassPhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !customer || !recipient) return;
+    const invalid = validatePassPhotoFile(file);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setPassPhoto({ previewUrl, uploading: true });
+    setError(undefined);
+    try {
+      const upload = await uploadPassPhoto({
+        file,
+        customerId: customer.id,
+        beneficiaryKind: recipient.kind,
+        beneficiaryId: recipient.id,
+      });
+      setPassPhoto({ previewUrl, upload, uploading: false });
+      setMessage("Đã upload ảnh thẻ vé thời hạn.");
+    } catch (e) {
+      setPassPhoto({ previewUrl, uploading: false, error: (e as Error).message });
+      setError("Upload ảnh thẻ thất bại: " + (e as Error).message);
+    }
+  }
+
   function selectedAudience(audience?: Audience) {
     return audience ?? recipient?.audience ?? "ADULT";
   }
@@ -231,6 +274,10 @@ export default function CounterSalePage() {
       setError("Chọn HLV cho khóa học trước khi thu tiền.");
       return;
     }
+    if (hasPass && !passPhotoReady) {
+      setError("Vé tháng/quý/năm bắt buộc có ảnh thật của người dùng vé. Chụp hoặc chọn ảnh trước khi kích hoạt.");
+      return;
+    }
     setPaying(true);
     setError(undefined);
     setMessage(undefined);
@@ -247,6 +294,7 @@ export default function CounterSalePage() {
           packageSize: item.packageSize,
           swimStyle: item.swimStyle,
           audience: item.audience,
+          passPhoto: item.productType === "PASS" && passPhoto?.upload ? { storagePath: passPhoto.upload.storagePath } : undefined,
           coachId: item.productType === "SWIM_COURSE" ? coachId : undefined,
           startHour: item.productType === "SWIM_COURSE" ? startHour : undefined,
           method,
@@ -254,6 +302,7 @@ export default function CounterSalePage() {
         codes.push(`MS${r.memberCode}`);
       }
       setItems([]);
+      setPassPhoto(null);
       await loadActiveServices(customer.id);
       setMessage(`Đã thu ${formatVND(total)} và kích hoạt ${codes.join(", ")}.`);
     } catch (e) {
@@ -359,7 +408,7 @@ export default function CounterSalePage() {
                   ) : (
                     <>
                       <ActiveCard label="Vé tháng/quý/năm" value={memberships.length ? `${memberships.length} vé còn hạn` : "Chưa có"} tone="emerald" />
-                      <ActiveCard label="Vé lượt" value={packages.length ? packages.map((p) => `${p.remainingSessions}/${p.totalSessions} lượt`).join(" · ") : "Chưa có"} tone="amber" />
+                      <ActiveCard label="Vé lượt" value={packages.length ? packages.map((p) => `${p.holderName || customer.fullName || "Khách"}: ${p.remainingSessions}/${p.totalSessions} lượt`).join(" · ") : "Chưa có"} tone="amber" />
                       <ActiveCard label="Khóa học" value={enrollments.length ? enrollments.map((e) => `${e.attendedSessions}/${e.totalSessions} buổi`).join(" · ") : "Chưa có"} tone="sky" />
                     </>
                   )}
@@ -467,6 +516,40 @@ export default function CounterSalePage() {
             </div>
           )}
 
+          {hasPass && (
+            <div className="mt-4 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <div className="font-extrabold text-emerald-950">Ảnh thẻ vé thời hạn</div>
+              <p className="mt-1 text-xs font-semibold text-emerald-800">
+                Bắt buộc chụp/chọn ảnh thật của {recipient?.name || "người dùng vé"} trước khi kích hoạt.
+              </p>
+              <div className="mt-3 overflow-hidden rounded-2xl bg-white">
+                {passPhoto?.previewUrl ? (
+                  <img src={passPhoto.previewUrl} alt="Ảnh thẻ đã chọn" className="h-44 w-full object-cover" />
+                ) : (
+                  <div className="flex h-44 flex-col items-center justify-center px-5 text-center text-sm font-semibold text-slate-500">
+                    <Camera className="mb-2 size-8 text-emerald-600" />
+                    Chưa có ảnh thẻ
+                  </div>
+                )}
+              </div>
+              {passPhoto?.uploading && <p className="mt-2 text-sm font-bold text-emerald-800">Đang upload ảnh…</p>}
+              {passPhoto?.upload && <p className="mt-2 text-sm font-bold text-emerald-700">Ảnh đã upload thành công.</p>}
+              {passPhoto?.error && <p className="mt-2 text-sm font-bold text-red-600">{passPhoto.error}</p>}
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 px-3 py-2.5 text-sm font-bold text-white">
+                  {passPhoto ? <RotateCcw className="size-4" /> : <Camera className="size-4" />}
+                  {passPhoto ? "Chụp lại" : "Chụp ảnh"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={handlePassPhotoChange} />
+                </label>
+                <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-2xl bg-white px-3 py-2.5 text-sm font-bold text-emerald-800">
+                  <ImagePlus className="size-4" />
+                  Chọn ảnh
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePassPhotoChange} />
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="mt-5 border-t border-slate-200 pt-5">
             <div className="flex items-center justify-between text-sm text-slate-500"><span>Tổng tiền</span><span>{items.length} dịch vụ</span></div>
             <div className="mt-1 flex items-end justify-between"><span className="text-slate-500">Cần thu</span><span className="text-3xl font-extrabold text-brand-800">{formatVND(total)}</span></div>
@@ -489,7 +572,7 @@ export default function CounterSalePage() {
 
           <button
             onClick={payAndActivate}
-            disabled={!customer || !recipient || !items.length || paying || (hasCourse && !coachId)}
+            disabled={!customer || !recipient || !items.length || paying || (hasCourse && !coachId) || !passPhotoReady}
             className="mt-4 w-full rounded-3xl bg-gradient-to-r from-brand-700 to-teal-600 py-4 text-lg font-extrabold text-white shadow-xl shadow-brand-700/25 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none"
           >
             {paying ? "Đang kích hoạt…" : "Đã thu tiền · Kích hoạt ngay"}

@@ -2,6 +2,16 @@
 
 ## 2026-07-19
 
+- Vé thời hạn mới bắt buộc có ảnh thật của người dùng thẻ trước khi tạo đơn: khách có thể chụp bằng camera hoặc chọn ảnh trong máy, xem trước và chụp/chọn lại trước khi xác nhận.
+- Nút xác nhận đặt vé thời hạn chỉ mở sau khi ảnh đã upload thành công; server cũng từ chối tạo/kích hoạt PASS nếu thiếu ảnh hoặc ảnh không nằm đúng vùng lưu trữ của khách/người hưởng.
+- Bán vé thời hạn tại quầy cũng bắt buộc lễ tân chụp/chọn ảnh trước khi kích hoạt, bao gồm trường hợp mua cho con.
+- Ảnh thẻ được lưu trên đơn PASS và sao chép sang membership khi kích hoạt; thẻ vé thời hạn hiển thị ảnh đã lưu, còn thẻ cũ chưa có ảnh sẽ hiển thị fallback rõ ràng.
+- Làm thẻ vé thời hạn và vé lượt dễ đọc hơn: tên người dùng thẻ, loại thẻ và số lượt/ngày còn lại được tăng cỡ chữ, in đậm và tăng tương phản.
+- Vé lượt mới giờ lưu thêm người đứng tên thẻ (`holderKind`, `holderId`, `holderName`) khi kích hoạt từ đơn khách đặt và khi bán trực tiếp tại quầy.
+- Các vé lượt cũ không bị sửa dữ liệu; giao diện sẽ ưu tiên tên lưu trên vé, nếu thiếu thì đọc tên người hưởng từ đơn hàng cũ và cuối cùng mới fallback về tên hồ sơ khách.
+- Trang “Thẻ của tôi” hiển thị thêm thẻ khóa học bơi, có tên học viên, tiến độ, trạng thái chính và bấm vào để mở chi tiết khóa học hiện có.
+- Các màn xem thẻ/gói lượt/check-in/điểm danh hộ/bán tại quầy hiển thị rõ tên người hưởng để tránh nhầm giữa phụ huynh và con.
+
 - Đổi luồng check-in vé lượt bằng QR: khách chọn thẻ lượt rồi quét mã cổng sẽ trừ lượt ngay theo số lượt đang lưu trong QR, không còn tạo màn chờ lễ tân duyệt.
 - Backend vẫn kiểm tra đăng nhập, QR đúng nonce/chưa hết hạn/chưa dùng, thẻ thuộc đúng khách, còn hoạt động và đủ lượt trước khi trừ.
 - Các yêu cầu check-in vé lượt cũ còn trạng thái chờ được giữ lại để xem lịch sử, nhưng không còn duyệt/trừ được; khi thao tác sẽ chuyển sang hết hiệu lực và yêu cầu khách quét QR mới.

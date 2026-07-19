@@ -1,9 +1,23 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function isStaff() {
+      return request.auth != null && request.auth.token.role in ['OWNER','RECEPTIONIST'];
+    }
+
     match /avatars/{uid}/{file=**} {
       allow read: if true;
       allow write: if request.auth.uid == uid && request.resource.size < 2 * 1024 * 1024;
+    }
+    match /passPhotos/{customerUid}/{beneficiaryKind}/{beneficiaryId}/drafts/{file} {
+      allow read: if request.auth != null && (request.auth.uid == customerUid || isStaff());
+      allow create: if request.auth != null
+        && (request.auth.uid == customerUid || isStaff())
+        && beneficiaryKind in ['USER', 'CHILD']
+        && request.resource.size > 0
+        && request.resource.size < 4 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update, delete: if false;
     }
     match /receipts/{orderId}/{file=**} {
       allow read: if request.auth.token.role in ['OWNER','RECEPTIONIST'];

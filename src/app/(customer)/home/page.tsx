@@ -138,7 +138,7 @@ export default function HomePage() {
                 icon="🎫"
                 title={passLabel(m.duration)}
                 primary={`${days} ngày còn lại`}
-                secondary={`Hết hạn ${formatDate(m.endDate)}`}
+                secondary={`${m.holderName || profile.fullName || "Khách"} · Hết hạn ${formatDate(m.endDate)}`}
                 chip={isExpiring ? "warning" : "live"}
                 chipLabel={isExpiring ? `Sắp hết hạn` : `Đang hoạt động`}
               />
@@ -160,7 +160,7 @@ export default function HomePage() {
                 icon="🎟️"
                 title={`Gói ${p.totalSessions} lượt`}
                 primary={`${p.remainingSessions}/${p.totalSessions} lượt`}
-                secondary={`${pct}% còn lại · Bấm để xem lịch sử`}
+                secondary={`${p.holderName || profile.fullName || "Khách"} · ${pct}% còn lại · Bấm để xem lịch sử`}
                 progress={pct}
                 chip="live"
                 chipLabel="Đang hoạt động"

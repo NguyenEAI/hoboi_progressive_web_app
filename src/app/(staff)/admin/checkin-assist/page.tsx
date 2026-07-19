@@ -499,7 +499,7 @@ function PackageCheckin({
         <span className="text-2xl">🎟️</span>
         <div className="flex-1 min-w-0">
           <div className="truncate font-medium">
-            MS{pkg.memberCode} · Còn {pkg.remainingSessions}/{pkg.totalSessions} lượt
+            MS{pkg.memberCode} · {pkg.holderName || "Khách"} · Còn {pkg.remainingSessions}/{pkg.totalSessions} lượt
           </div>
           <div className="truncate text-xs text-slate-500">
             {audLabel} · Tạo {formatDate(pkg.createdAt)}

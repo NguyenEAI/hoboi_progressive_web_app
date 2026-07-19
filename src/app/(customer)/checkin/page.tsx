@@ -9,6 +9,7 @@ import type { Child, Membership, TicketPackage, Enrollment } from "@/types";
 import { SWIM_STYLES } from "@/lib/constants";
 import { formatDate, toDate } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
+import { resolvePackageHolderName } from "@/components/MemberCard";
 import { Camera, X, RotateCw, AlertTriangle, BookOpen, Ticket, CheckCircle2, IdCard } from "lucide-react";
 import Link from "next/link";
 import { BackButton } from "@/components/BackButton";
@@ -106,10 +107,11 @@ export default function CheckinPage() {
     // 2) Vé lượt
     for (const p of pkgs) {
       if ((p.remainingSessions ?? 0) <= 0) continue;
+      const holderName = resolvePackageHolderName(p, profile?.fullName ?? "");
       list.push({
         kind: "PACKAGE",
         id: p.id,
-        title: `Vé lượt MS${p.memberCode}`,
+        title: `Vé lượt MS${p.memberCode} · ${holderName}`,
         subtitle: `${audienceLabel(p.audience)} · Còn ${p.remainingSessions}/${p.totalSessions} lượt`,
         meta: "Số lượt trừ theo mã QR tại cổng",
         accent: "from-amber-500 to-amber-700",
@@ -117,7 +119,7 @@ export default function CheckinPage() {
       });
     }
     return list;
-  }, [enrolls, pkgs]);
+  }, [enrolls, pkgs, profile?.fullName]);
 
   // Banner riêng cho vé thời hạn — KHÔNG cần quét QR
   const activeMemberships = useMemo(

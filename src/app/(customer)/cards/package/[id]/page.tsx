@@ -3,14 +3,14 @@
 // v2.4.2 (Q1) — Trang chi tiết vé lượt: hiển thị thông tin gói + lịch sử usage (mỗi lần ai vào, mấy lượt).
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { useParams } from "next/navigation";
 import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import type { TicketPackage } from "@/types";
 import { formatDate, toDate } from "@/lib/utils";
 import { BackButton } from "@/components/BackButton";
-import { PackageCard } from "@/components/MemberCard";
+import { PackageCard, resolvePackageHolderName } from "@/components/MemberCard";
 import { Ticket, History, AlertCircle, TrendingDown } from "lucide-react";
 
 const audienceLabel: Record<string, string> = {
@@ -24,6 +24,7 @@ export default function PackageDetailPage() {
   const id = String(params?.id ?? "");
   const { profile } = useAuthUser();
   const [pkg, setPkg] = useState<TicketPackage | null>(null);
+  const [orderBeneficiaryName, setOrderBeneficiaryName] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,6 +39,23 @@ export default function PackageDetailPage() {
       () => setLoading(false),
     );
   }, [id]);
+
+  useEffect(() => {
+    if (!pkg || pkg.holderName?.trim() || !pkg.orderId) {
+      setOrderBeneficiaryName("");
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, "orders", pkg.orderId))
+      .then((snap) => {
+        if (cancelled) return;
+        setOrderBeneficiaryName(snap.exists() ? String(snap.data().beneficiaryName ?? "").trim() : "");
+      })
+      .catch(() => {
+        if (!cancelled) setOrderBeneficiaryName("");
+      });
+    return () => { cancelled = true; };
+  }, [pkg]);
 
   if (loading) {
     return (
@@ -67,6 +85,7 @@ export default function PackageDetailPage() {
   });
   const used = pkg.totalSessions - pkg.remainingSessions;
   const usedPct = Math.round((used / pkg.totalSessions) * 100);
+  const holderName = resolvePackageHolderName(pkg, orderBeneficiaryName || profile?.fullName || "");
 
   return (
     <main className="mx-auto max-w-md pb-safe">
@@ -85,7 +104,7 @@ export default function PackageDetailPage() {
       <div className="space-y-4 p-4">
         {/* Thẻ điện tử */}
         <div className="animate-fade-up">
-          <PackageCard p={pkg} holderName={profile?.fullName ?? ""} />
+          <PackageCard p={pkg} holderName={holderName} />
         </div>
 
         {/* Thông tin tổng */}

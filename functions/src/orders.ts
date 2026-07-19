@@ -27,6 +27,7 @@ async function loadPricing(): Promise<{
 const REGION = "asia-southeast1";
 const db = () => admin.firestore();
 const FV = admin.firestore.FieldValue;
+const PASS_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
 function requireAuth(req: any): string {
   if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
@@ -37,6 +38,43 @@ function requireStaff(req: any) {
   if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Không đủ quyền");
+}
+
+async function requireOwnedChild(customerId: string, beneficiaryKind: string, beneficiaryId: string) {
+  if (beneficiaryKind !== "CHILD") return;
+  const child = await db().doc(`users/${customerId}/children/${beneficiaryId}`).get();
+  if (!child.exists) throw new HttpsError("permission-denied", "Hồ sơ trẻ không thuộc tài khoản này");
+}
+
+async function validatePassPhoto(req: any, customerId: string, beneficiaryKind: string, beneficiaryId: string, rawPhoto: any) {
+  const storagePath = String(rawPhoto?.storagePath ?? "").replace(/^\/+/, "");
+  if (!storagePath)
+    throw new HttpsError("invalid-argument", "Vé thời hạn bắt buộc có ảnh thật của người dùng thẻ");
+  if (storagePath.includes("..") || storagePath.endsWith("/"))
+    throw new HttpsError("invalid-argument", "Đường dẫn ảnh không hợp lệ");
+
+  const expectedPrefix = `passPhotos/${customerId}/${beneficiaryKind}/${beneficiaryId}/drafts/`;
+  if (!storagePath.startsWith(expectedPrefix))
+    throw new HttpsError("permission-denied", "Ảnh thẻ không thuộc đúng khách/người dùng vé");
+
+  const file = admin.storage().bucket().file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) throw new HttpsError("failed-precondition", "Ảnh thẻ chưa upload thành công");
+
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "");
+  const sizeBytes = Number(metadata.size ?? 0);
+  if (!/^image\/(jpeg|png|webp)$/.test(contentType))
+    throw new HttpsError("invalid-argument", "Ảnh thẻ phải là JPG, PNG hoặc WebP");
+  if (!sizeBytes || sizeBytes > PASS_PHOTO_MAX_BYTES)
+    throw new HttpsError("invalid-argument", "Ảnh thẻ tối đa 4MB");
+
+  return {
+    storagePath,
+    contentType,
+    sizeBytes,
+    uploadedBy: req.auth!.uid,
+  };
 }
 
 // Sinh số thẻ (MS) tăng dần qua counter
@@ -60,11 +98,18 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
   let amountVND = 0;
   const snapshot: { [k: string]: unknown } = { audience: d.audience ?? null };
   const prices = await loadPricing();
+  const finalBeneficiaryKind = beneficiaryKind ?? "USER";
+  const finalBeneficiaryId = beneficiaryId ?? uid;
+  if (!["USER", "CHILD"].includes(finalBeneficiaryKind))
+    throw new HttpsError("invalid-argument", "Người hưởng không hợp lệ");
+  let passPhoto: { storagePath: string; contentType: string; sizeBytes: number; uploadedBy: string } | undefined;
 
   if (productType === "PASS") {
     const aud = d.audience as Audience;
     const dur = d.duration as PassDuration;
     if (!prices.pass[aud]?.[dur]) throw new HttpsError("invalid-argument", "Sai loại vé/đối tượng");
+    await requireOwnedChild(uid, finalBeneficiaryKind, finalBeneficiaryId);
+    passPhoto = await validatePassPhoto(req, uid, finalBeneficiaryKind, finalBeneficiaryId, d.passPhoto);
     amountVND = prices.pass[aud][dur];
     snapshot.name = passLabel(dur);
     snapshot.duration = dur;
@@ -99,14 +144,15 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
 
   const baseOrder = {
     customerId: uid,
-    beneficiaryKind: beneficiaryKind ?? "USER",
-    beneficiaryId: beneficiaryId ?? uid,
+    beneficiaryKind: finalBeneficiaryKind,
+    beneficiaryId: finalBeneficiaryId,
     beneficiaryName: beneficiaryName ?? "",
     productType,
     productSnapshot: snapshot,
     amountVND,
     status: "PENDING_PAYMENT",
     createdAt: FV.serverTimestamp(),
+    ...(passPhoto ? { passPhoto } : {}),
   };
 
   // Khóa học: giữ chỗ slot trong transaction
@@ -190,6 +236,8 @@ export const confirmPayment = onCall({ region: REGION }, async (req) => {
     const code = await nextMemberCode(tx);
 
     if (o.productType === "PASS") {
+      if (!o.passPhoto?.storagePath)
+        throw new HttpsError("failed-precondition", "Đơn vé thời hạn thiếu ảnh thẻ. Hủy đơn và tạo lại với ảnh thật.");
       const days = PASS_DAYS[ps.duration as PassDuration];
       const end = new Date(); end.setDate(end.getDate() + days);
       const ref = db().collection("memberships").doc();
@@ -198,13 +246,15 @@ export const confirmPayment = onCall({ region: REGION }, async (req) => {
         holderKind: o.beneficiaryKind, holderId: o.beneficiaryId, holderName: o.beneficiaryName,
         orderId, duration: ps.duration, audience: ps.audience,
         startDate: now, endDate: admin.firestore.Timestamp.fromDate(end),
-        amountVND: o.amountVND, status: "ACTIVE", createdAt: now,
+        amountVND: o.amountVND, status: "ACTIVE", passPhoto: o.passPhoto,
+        createdAt: now,
       });
     } else if (o.productType === "PACKAGE") {
       const total = PACKAGE_SESSIONS[ps.packageSize as PackageSize];
       const ref = db().collection("ticketPackages").doc();
       tx.set(ref, {
         id: ref.id, memberCode: code, userId: o.customerId, orderId,
+        holderKind: o.beneficiaryKind, holderId: o.beneficiaryId, holderName: o.beneficiaryName,
         size: ps.packageSize, audience: ps.audience,
         totalSessions: total, remainingSessions: total,
         amountVND: o.amountVND, status: "ACTIVE", usageHistory: [], createdAt: now,
@@ -302,6 +352,13 @@ export const createCounterSale = onCall({ region: REGION, cors: true }, async (r
   const beneficiaryKind = d.beneficiaryKind ?? "USER";
   const beneficiaryId = d.beneficiaryId ?? customerId;
   const beneficiaryName = d.beneficiaryName ?? "";
+  if (!["USER", "CHILD"].includes(beneficiaryKind))
+    throw new HttpsError("invalid-argument", "Người hưởng không hợp lệ");
+  let passPhoto: { storagePath: string; contentType: string; sizeBytes: number; uploadedBy: string } | undefined;
+  if (productType === "PASS") {
+    await requireOwnedChild(customerId, beneficiaryKind, beneficiaryId);
+    passPhoto = await validatePassPhoto(req, customerId, beneficiaryKind, beneficiaryId, d.passPhoto);
+  }
   const now = admin.firestore.Timestamp.now();
 
   const result = await db().runTransaction(async (tx) => {
@@ -346,6 +403,7 @@ export const createCounterSale = onCall({ region: REGION, cors: true }, async (r
       paidAt: now,
       confirmedByStaffId: req.auth!.uid,
       source: "COUNTER",
+      ...(passPhoto ? { passPhoto } : {}),
       ...(productType === "SWIM_COURSE" ? { coachId: d.coachId, slotId, startDate: startDateTs } : {}),
     });
 
@@ -358,13 +416,15 @@ export const createCounterSale = onCall({ region: REGION, cors: true }, async (r
         holderKind: beneficiaryKind, holderId: beneficiaryId, holderName: beneficiaryName,
         orderId: orderRef.id, duration: snapshot.duration, audience: snapshot.audience,
         startDate: now, endDate: admin.firestore.Timestamp.fromDate(end),
-        amountVND, status: "ACTIVE", createdAt: now,
+        amountVND, status: "ACTIVE", passPhoto,
+        createdAt: now,
       });
     } else if (productType === "PACKAGE") {
       const total = PACKAGE_SESSIONS[snapshot.packageSize as PackageSize];
       const ref = db().collection("ticketPackages").doc();
       tx.set(ref, {
         id: ref.id, memberCode: code, userId: customerId, orderId: orderRef.id,
+        holderKind: beneficiaryKind, holderId: beneficiaryId, holderName: beneficiaryName,
         size: snapshot.packageSize, audience: snapshot.audience,
         totalSessions: total, remainingSessions: total,
         amountVND, status: "ACTIVE", usageHistory: [], createdAt: now,

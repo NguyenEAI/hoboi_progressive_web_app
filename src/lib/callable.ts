@@ -12,6 +12,7 @@ export const createOrder = call<
     productType: "PASS" | "PACKAGE" | "SWIM_COURSE";
     duration?: string; packageSize?: string; swimStyle?: string; audience?: string;
     beneficiaryKind: "USER" | "CHILD"; beneficiaryId: string; beneficiaryName: string;
+    passPhoto?: { storagePath: string };
     coachId?: string;
     // legacy
     slotId?: string; startDate?: string;
@@ -32,6 +33,7 @@ export const createCounterSale = call<
     packageSize?: string;
     swimStyle?: string;
     audience?: string;
+    passPhoto?: { storagePath: string };
     coachId?: string;
     startHour?: number;
     weekOffset?: number;

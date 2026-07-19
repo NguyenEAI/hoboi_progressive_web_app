@@ -24,6 +24,13 @@ export type ProductType =
   | "PACKAGE" // gói lượt
   | "SWIM_COURSE"; // khóa học
 
+export interface PassPhotoRef {
+  storagePath: string;
+  contentType?: string;
+  sizeBytes?: number;
+  uploadedBy?: string;
+}
+
 export type OrderStatus =
   | "DRAFT"
   | "PENDING_PAYMENT"
@@ -127,6 +134,7 @@ export interface Order {
   };
   amountVND: number;
   status: OrderStatus;
+  passPhoto?: PassPhotoRef;
   // riêng SWIM_COURSE:
   coachId?: string;
   slotId?: string;
@@ -163,11 +171,15 @@ export interface Membership {
   endDate: TS;
   amountVND: number;
   status: MembershipStatus;
+  passPhoto?: PassPhotoRef;
   createdAt: TS;
 }
 
 export interface TicketPackage {
   id: string;
+  holderKind?: "USER" | "CHILD";
+  holderId?: string;
+  holderName?: string;
   memberCode: string;
   userId: string; // người mua / chủ thẻ
   orderId: string;
