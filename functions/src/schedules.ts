@@ -1,5 +1,6 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+import { TICKET_PACKAGE_EXPIRED_MESSAGE } from "./packageExpiry";
 
 const REGION = "asia-southeast1";
 const TZ = "Asia/Ho_Chi_Minh";
@@ -16,6 +17,16 @@ export const expireServicesDaily = onSchedule(
     const b1 = db().batch();
     mems.forEach((d) => b1.update(d.ref, { status: "EXPIRED" }));
     await b1.commit();
+
+    const pkgs = await db().collection("ticketPackages")
+      .where("status", "==", "ACTIVE").where("expiryDate", "<", now).get();
+    const bPkg = db().batch();
+    pkgs.forEach((d) => bPkg.update(d.ref, {
+      status: "EXPIRED",
+      expiredAt: now,
+      expireReason: TICKET_PACKAGE_EXPIRED_MESSAGE,
+    }));
+    if (!pkgs.empty) await bPkg.commit();
 
     // Khóa học hết hạn → EXPIRED + giải phóng slot + thông báo lý do
     const enrolls = await db().collection("enrollments")

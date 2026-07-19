@@ -246,7 +246,7 @@ export default function CourseWizard() {
               <div className="mt-1 space-y-2">
                 <Radio label={`${profile?.fullName} (bản thân)`} checked={studentId === "self"} onClick={() => setStudentId("self")} />
                 {children.map((c) => (
-                  <Radio key={c.id} label={`${c.fullName} (con)`} checked={studentId === c.id} onClick={() => setStudentId(c.id)} />
+                  <Radio key={c.id} label={`${c.fullName} (con) · ${childCategoryText(c)}`} checked={studentId === c.id} onClick={() => setStudentId(c.id)} />
                 ))}
               </div>
             </div>
@@ -323,3 +323,9 @@ const Radio = ({ label, checked, onClick }: { label: string; checked: boolean; o
 const Sum = ({ l, v }: { l: string; v: string }) => (
   <div className="flex justify-between py-0.5 text-sm"><span className="text-slate-500">{l}</span><b className="text-right">{v}</b></div>
 );
+
+function childCategoryText(child: Child) {
+  if (child.audience === "CHILD_UNDER_140" || child.heightCm && child.heightCm < 140) return "trẻ dưới 1.4m";
+  if (child.audience === "CHILD_OVER_140" || child.heightCm && child.heightCm >= 140) return "trẻ từ 1.4m";
+  return "chưa có chiều cao";
+}

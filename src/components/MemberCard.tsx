@@ -6,6 +6,7 @@ import { getDownloadURL, ref as storageRef } from "firebase/storage";
 import { storage } from "@/lib/firebase/client";
 import type { Enrollment, Membership, TicketPackage } from "@/types";
 import { formatDate, daysUntil } from "@/lib/utils";
+import { getPackageExpiryDate, isPackageExpired } from "@/lib/packageExpiry";
 import { PASS_DURATIONS, AUDIENCES, SWIM_STYLES } from "@/lib/constants";
 import { WavePattern } from "./Decorations";
 
@@ -155,9 +156,13 @@ export function PackageCard({ p, holderName }: { p: TicketPackage; holderName: s
   const used = p.totalSessions - p.remainingSessions;
   const pct = Math.round((p.remainingSessions / p.totalSessions) * 100);
   const safeHolderName = resolvePackageHolderName(p, holderName);
+  const expiry = getPackageExpiryDate(p);
+  const expired = p.status === "EXPIRED" || isPackageExpired(p);
+  const depleted = (p.remainingSessions ?? 0) <= 0 || p.status === "DEPLETED";
+  const statusText = expired ? "Hết hạn" : depleted ? "Hết lượt" : "Đang dùng";
 
   return (
-    <div className="relative overflow-hidden rounded-3xl shadow-float border border-slate-100 bg-white">
+    <div className={`relative overflow-hidden rounded-3xl shadow-float border border-slate-100 bg-white ${expired ? "opacity-80 grayscale" : ""}`}>
       {/* Front header bar with gradient background */}
       <div className="relative overflow-hidden px-6 py-6 text-white">
         <div
@@ -179,7 +184,7 @@ export function PackageCard({ p, holderName }: { p: TicketPackage; holderName: s
           </div>
 
           <div className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wide text-amber-950 shadow-md ring-1 ring-white/40">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-350 animate-pulse" />
+            <span className={`h-1.5 w-1.5 rounded-full ${expired || depleted ? "bg-slate-400" : "bg-amber-350 animate-pulse"}`} />
             Gói {p.totalSessions} lượt · {audienceLabel(p.audience)}
           </div>
 
@@ -205,7 +210,7 @@ export function PackageCard({ p, holderName }: { p: TicketPackage; holderName: s
           </div>
 
           <div className="mt-4 text-xs font-black uppercase tracking-wider text-white/90">
-            MS{p.memberCode}
+            MS{p.memberCode} · {statusText}
           </div>
         </div>
       </div>
@@ -214,7 +219,7 @@ export function PackageCard({ p, holderName }: { p: TicketPackage; holderName: s
       <div className="relative border-t border-slate-100 bg-slate-50/50 px-6 py-5 z-10">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
-            Lịch sử lượt sử dụng
+            HSD {expiry ? formatDate(expiry) : "-"}
           </div>
           <div className="text-[10.5px] font-semibold text-slate-500">
             Đã dùng <b className="text-amber-700 font-extrabold">{used}</b>/{p.totalSessions} lượt

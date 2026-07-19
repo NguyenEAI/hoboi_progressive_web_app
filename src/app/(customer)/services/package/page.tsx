@@ -149,6 +149,7 @@ export default function PackageWizardPage() {
           <BeneficiaryOption
             active={beneficiary === "self"}
             onClick={() => {
+              setAudience("ADULT");
               setBeneficiary("self");
               setStep("confirm");
             }}
@@ -161,12 +162,14 @@ export default function PackageWizardPage() {
               key={c.id}
               active={beneficiary === c.id}
               onClick={() => {
+                const childAudience = audienceFromChild(c);
+                if (childAudience) setAudience(childAudience);
                 setBeneficiary(c.id);
                 setStep("confirm");
               }}
               emoji="🧒"
               title={c.fullName}
-              subtitle="Con"
+              subtitle={`Con · ${childCategoryText(c)}`}
             />
           ))}
           <Link
@@ -289,4 +292,18 @@ function Row({ l, v }: { l: string; v: React.ReactNode }) {
       <b className="text-right">{v}</b>
     </div>
   );
+}
+
+function audienceFromChild(child?: Child): Audience | null {
+  if (!child) return null;
+  if (child.audience === "CHILD_UNDER_140" || child.audience === "CHILD_OVER_140") return child.audience;
+  if (typeof child.heightCm === "number") return child.heightCm < 140 ? "CHILD_UNDER_140" : "CHILD_OVER_140";
+  return null;
+}
+
+function childCategoryText(child: Child) {
+  const audience = audienceFromChild(child);
+  if (audience === "CHILD_UNDER_140") return `${child.heightCm ?? "<140"} cm · trẻ dưới 1.4m`;
+  if (audience === "CHILD_OVER_140") return `${child.heightCm ?? "≥140"} cm · trẻ từ 1.4m`;
+  return "chưa có chiều cao";
 }

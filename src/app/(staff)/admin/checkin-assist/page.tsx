@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase/client";
 import { staffCheckinByPhone, searchCustomerByPhone, correctPackageCheckin, extendService } from "@/lib/callable";
 import type { User, Child, Membership, TicketPackage, Enrollment, CheckIn } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { getPackageExpiryDate, isPackageExpired } from "@/lib/packageExpiry";
 import { Ticket, Calendar, GraduationCap, Search } from "lucide-react";
 
 // v2.3 (D9): điểm danh hộ mở rộng cho VÉ LƯỢT (chọn số lượt) + khóa học + vé thời hạn.
@@ -109,7 +110,7 @@ export default function CheckinAssistPage() {
       const [cs, mems, pkgs, enrs] = await Promise.all([
         getDocs(collection(db, `users/${p.id}/children`)),
         getDocs(query(collection(db, "memberships"), where("userId", "==", p.id), where("status", "==", "ACTIVE"))),
-        getDocs(query(collection(db, "ticketPackages"), where("userId", "==", p.id), where("status", "==", "ACTIVE"))),
+        getDocs(query(collection(db, "ticketPackages"), where("userId", "==", p.id))),
         Promise.all([
           getDocs(query(collection(db, "enrollments"), where("studentId", "==", p.id), where("status", "==", "ACTIVE"))),
           getDocs(query(collection(db, "enrollments"), where("parentId", "==", p.id), where("status", "==", "ACTIVE"))),
@@ -119,7 +120,10 @@ export default function CheckinAssistPage() {
       setChildren(cs.docs.map((d) => ({ id: d.id, ...d.data() } as Child)));
       setTickets({
         memberships: mems.docs.map((d) => ({ id: d.id, ...d.data() } as Membership)),
-        packages: pkgs.docs.map((d) => ({ id: d.id, ...d.data() } as TicketPackage)),
+        packages: pkgs.docs
+          .map((d) => ({ id: d.id, ...d.data() } as TicketPackage))
+          .filter((p) => p.status !== "SUSPENDED")
+          .sort((a, b) => Number(isPackageExpired(a)) - Number(isPackageExpired(b))),
         enrollments: enrs.docs.map((d) => ({ id: d.id, ...d.data() } as Enrollment)),
       });
       await loadRecentCheckins(p.id);
@@ -170,6 +174,10 @@ export default function CheckinAssistPage() {
 
   async function checkinPackage(p: TicketPackage, count: number, reason: string) {
     if (!customer || count < 1 || count > p.remainingSessions || !reason.trim()) return;
+    if (isPackageExpired(p)) {
+      setError("Vé lượt đã hết hạn sau 365 ngày từ ngày kích hoạt. Vui lòng mua gói mới tại quầy.");
+      return;
+    }
     setBusy("pkg-" + p.id);
     setMsg(undefined);
     setError(undefined);
@@ -486,6 +494,9 @@ function PackageCheckin({
   const [count, setCount] = useState(1);
   const [reason, setReason] = useState("");
   const max = pkg.remainingSessions;
+  const expiry = getPackageExpiryDate(pkg);
+  const expired = pkg.status === "EXPIRED" || isPackageExpired(pkg);
+  const depleted = max <= 0 || pkg.status === "DEPLETED";
   const audLabel =
     pkg.audience === "ADULT"
       ? "Người lớn"
@@ -494,7 +505,7 @@ function PackageCheckin({
         : "Trẻ ≥1.4m";
 
   return (
-    <div className="rounded-xl border border-slate-100 bg-white p-3">
+    <div className={`rounded-xl border p-3 ${expired ? "border-red-200 bg-red-50" : "border-slate-100 bg-white"}`}>
       <div className="flex items-center gap-3">
         <span className="text-2xl">🎟️</span>
         <div className="flex-1 min-w-0">
@@ -502,13 +513,19 @@ function PackageCheckin({
             MS{pkg.memberCode} · {pkg.holderName || "Khách"} · Còn {pkg.remainingSessions}/{pkg.totalSessions} lượt
           </div>
           <div className="truncate text-xs text-slate-500">
-            {audLabel} · Tạo {formatDate(pkg.createdAt)}
+            {audLabel} · HSD {expiry ? formatDate(expiry) : "đang cập nhật"}
           </div>
         </div>
       </div>
+      {expired && (
+        <div className="mt-3 rounded-lg bg-white/70 p-2 text-xs font-medium text-red-700">
+          Vé lượt đã hết hạn sau 365 ngày từ ngày kích hoạt. Không thể điểm danh bằng gói này.
+        </div>
+      )}
       <input
         value={reason}
         onChange={(e) => setReason(e.target.value)}
+        disabled={expired || depleted}
         placeholder="Lý do xác nhận hộ (bắt buộc)"
         className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
       />
@@ -518,7 +535,7 @@ function PackageCheckin({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCount(Math.max(1, count - 1))}
-              disabled={count <= 1}
+              disabled={expired || depleted || count <= 1}
               className="flex size-8 items-center justify-center rounded-full bg-white text-lg font-bold text-slate-600 ring-1 ring-slate-200 disabled:opacity-40"
             >
               −
@@ -526,7 +543,7 @@ function PackageCheckin({
             <span className="w-8 text-center font-bold tabular-nums">{count}</span>
             <button
               onClick={() => setCount(Math.min(max, count + 1))}
-              disabled={count >= max}
+              disabled={expired || depleted || count >= max}
               className="flex size-8 items-center justify-center rounded-full bg-brand-600 text-lg font-bold text-white disabled:opacity-40"
             >
               +
@@ -535,10 +552,10 @@ function PackageCheckin({
         </div>
         <button
           onClick={() => onCheckin(count, reason)}
-          disabled={busy || count < 1 || count > max || !reason.trim()}
+          disabled={busy || expired || depleted || count < 1 || count > max || !reason.trim()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? "..." : `Trừ ${count} lượt`}
+          {expired ? "Hết hạn" : depleted ? "Hết lượt" : busy ? "..." : `Trừ ${count} lượt`}
         </button>
       </div>
     </div>

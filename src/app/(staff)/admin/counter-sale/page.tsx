@@ -78,7 +78,7 @@ export default function CounterSalePage() {
   const recipientOptions = useMemo<Recipient[]>(() => {
     if (!customer) return [];
     const self: Recipient = { kind: "USER", id: customer.id, name: customer.fullName || displayPhone(customer.phone || phone), label: children.length ? "Bố/mẹ" : "Khách", audience: "ADULT" };
-    return [self, ...children.map((child) => ({ kind: "CHILD" as const, id: child.id, name: child.fullName, label: "Con", audience: child.audience ?? "CHILD_OVER_140" }))];
+    return [self, ...children.map((child) => ({ kind: "CHILD" as const, id: child.id, name: child.fullName, label: "Con", audience: audienceFromChild(child) }))];
   }, [children, customer, phone]);
 
   function normalizePhoneInput(value: string) {
@@ -666,4 +666,10 @@ function audienceLabel(audience: Audience) {
   if (audience === "ADULT") return "Người lớn";
   if (audience === "CHILD_OVER_140") return "Trẻ em trên 1.4m";
   return "Trẻ em dưới 1.4m";
+}
+
+function audienceFromChild(child: Child): Audience {
+  if (child.audience === "CHILD_UNDER_140" || child.audience === "CHILD_OVER_140") return child.audience;
+  if (typeof child.heightCm === "number") return child.heightCm < 140 ? "CHILD_UNDER_140" : "CHILD_OVER_140";
+  return "CHILD_OVER_140";
 }

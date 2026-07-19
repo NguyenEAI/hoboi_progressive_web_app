@@ -87,6 +87,7 @@ Trẻ <1.4m: 25k · Trẻ ≥1.4m: 30k · Người lớn: 35k · Người lớn 
 | INV-14 | Mọi callable bật `requireAppCheck` ở prod |
 | INV-20 | **Khách hàng KHÔNG được tự đổi `fullName`** sau khi đã set. Firestore rules block self-update khi `resource.data.fullName != ''`. UI ẩn nút Pencil ở `/profile`. Đổi tên chỉ qua callable `updateCustomerName` (Owner + Lễ tân) tại `/admin/customers`. Lý do: tránh lễ tân tra SĐT bị nhầm khách do tự đổi tên. |
 | INV-21 | **Điểm danh khoá học không kiểm giờ ca** — chỉ kiểm `weekday` (đúng ngày dạy). Khách đến sớm/muộn so với ca vẫn được điểm danh; số buổi `attendedSessions` không phụ thuộc giờ. Lý do: trải nghiệm flexible cho gia đình + lễ tân không cần giải thích "chưa đến giờ học". Vẫn block nếu sai weekday (tránh điểm danh ngày HLV nghỉ). |
+| INV-22 | **Gói lượt hết hạn sau 365 ngày từ ngày kích hoạt**. Gói mới lưu `startDate` + `expiryDate`; gói cũ thiếu `expiryDate` phải derive runtime từ `startDate` hoặc `createdAt`. Gói đã hết hạn không được QR/staff check-in dù legacy `status` còn `ACTIVE`; lịch sử dùng/hoàn lượt vẫn giữ nguyên. |
 
 ## 6. Vòng đời
 
@@ -207,6 +208,13 @@ rejectReason?
 checkinId?                 (link sang /checkins khi APPROVED)
 ```
 
+**TicketPackage** `/ticketPackages/{id}` (bổ sung hạn dùng):
+```
+startDate?                 (ngày kích hoạt; gói legacy có thể thiếu)
+expiryDate?                (startDate + 365 ngày; gói legacy derive từ startDate/createdAt)
+expiredAt?                 (scheduler set khi có expiryDate và đã quá hạn)
+```
+
 **CoachAbsence** `/coaches/{coachId}/absences/{YYYY-MM-DD_H}` (mới v2.4):
 ```
 coachId, date (YYYY-MM-DD), startHour (number)
@@ -235,6 +243,7 @@ Chỉ HLV đứng lớp được thêm (callable check `coachId == enrollment.co
 - `Order.productSnapshot` đóng băng giá (INV-10)
 - `Membership.endDate = startDate + PASS_DAYS[duration]`
 - `TicketPackage.remainingSessions = totalSessions - sum(usageHistory.count)` (transaction)
+- `TicketPackage.expiryDate = startDate + 365 days`; nếu legacy thiếu `expiryDate`, runtime derive từ `startDate`/`createdAt` và vẫn block check-in khi hết hạn.
 - `Enrollment.attendedSessions ≤ 15`, `expiryDate = startDate + 90 days`
 - `CheckinRequest.status` chỉ chuyển từ `PENDING` sang `APPROVED/REJECTED/EXPIRED` 1 lần (transaction); `approvedCount > 0 && approvedCount ≤ remainingSessions` (INV-15)
 - `Enrollment.coachNotes[]` chỉ append, không update/delete cá nhân (INV-12). Mỗi note 1..500 ký tự.

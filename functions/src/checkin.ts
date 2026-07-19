@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { SWIM_COURSE_TOTAL_SESSIONS } from "./pricing";
 import { phoneVariants } from "./helpers";
+import { TICKET_PACKAGE_EXPIRED_MESSAGE, isTicketPackageExpired } from "./packageExpiry";
 
 function positiveInt(value: unknown, fallback = 1): number {
   const n = Math.floor(Number(value ?? fallback));
@@ -175,6 +176,8 @@ async function resolveCheckin(
     const p = pDoc.data()!;
     if (p.status !== "ACTIVE")
       throw new HttpsError("failed-precondition", "Vé không còn hoạt động");
+    if (isTicketPackageExpired(p))
+      throw new HttpsError("failed-precondition", TICKET_PACKAGE_EXPIRED_MESSAGE);
     if (p.userId !== userId)
       throw new HttpsError("permission-denied", "Vé này không phải của khách");
     const isChildCard =
@@ -380,7 +383,8 @@ async function resolveCheckin(
       const tb = (b.data().createdAt?.toMillis?.() ?? 0) as number;
       return ta - tb;
     });
-  const pkg = pkgSorted.find((p) => (p.data().remainingSessions ?? 0) >= groupSize);
+  const usablePkgs = pkgSorted.filter((p) => !isTicketPackageExpired(p.data()));
+  const pkg = usablePkgs.find((p) => (p.data().remainingSessions ?? 0) >= groupSize);
   if (pkg) {
     const data = pkg.data();
     // Quy tắc: gói TRẺ EM không dùng cho người lớn (không phụ thu)
@@ -413,8 +417,10 @@ async function resolveCheckin(
     };
   }
   // có gói nhưng không đủ lượt
-  if (pkgSorted.some((p) => (p.data().remainingSessions ?? 0) > 0))
+  if (usablePkgs.some((p) => (p.data().remainingSessions ?? 0) > 0))
     throw new HttpsError("resource-exhausted", "Số lượt còn lại không đủ cho cả nhóm");
+  if (pkgSorted.some((p) => isTicketPackageExpired(p.data()) && (p.data().remainingSessions ?? 0) > 0))
+    throw new HttpsError("failed-precondition", TICKET_PACKAGE_EXPIRED_MESSAGE);
   } // end PACKAGE block
 
   if (skip("MEMBERSHIP")) {

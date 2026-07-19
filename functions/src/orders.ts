@@ -6,6 +6,7 @@ import {
   SWIM_COURSE_PRICE as FB_COURSE, SWIM_COURSE_TOTAL_SESSIONS, SWIM_COURSE_VALIDITY_DAYS,
   SLOT_CAPACITY, passLabel, packLabel, styleLabel,
 } from "./pricing";
+import { packageExpiryFromStart } from "./packageExpiry";
 
 // Đọc bảng giá hiện tại từ Firestore /settings/pricing.
 // Fallback về giá hardcode nếu doc chưa tồn tại (chưa seed pricing).
@@ -252,12 +253,14 @@ export const confirmPayment = onCall({ region: REGION }, async (req) => {
     } else if (o.productType === "PACKAGE") {
       const total = PACKAGE_SESSIONS[ps.packageSize as PackageSize];
       const ref = db().collection("ticketPackages").doc();
+      const expiryDate = packageExpiryFromStart(now);
       tx.set(ref, {
         id: ref.id, memberCode: code, userId: o.customerId, orderId,
         holderKind: o.beneficiaryKind, holderId: o.beneficiaryId, holderName: o.beneficiaryName,
         size: ps.packageSize, audience: ps.audience,
         totalSessions: total, remainingSessions: total,
-        amountVND: o.amountVND, status: "ACTIVE", usageHistory: [], createdAt: now,
+        amountVND: o.amountVND, status: "ACTIVE", usageHistory: [],
+        startDate: now, expiryDate, createdAt: now,
       });
     } else if (o.productType === "SWIM_COURSE") {
       const start = o.startDate ? o.startDate.toDate() : new Date();
@@ -422,12 +425,14 @@ export const createCounterSale = onCall({ region: REGION, cors: true }, async (r
     } else if (productType === "PACKAGE") {
       const total = PACKAGE_SESSIONS[snapshot.packageSize as PackageSize];
       const ref = db().collection("ticketPackages").doc();
+      const expiryDate = packageExpiryFromStart(now);
       tx.set(ref, {
         id: ref.id, memberCode: code, userId: customerId, orderId: orderRef.id,
         holderKind: beneficiaryKind, holderId: beneficiaryId, holderName: beneficiaryName,
         size: snapshot.packageSize, audience: snapshot.audience,
         totalSessions: total, remainingSessions: total,
-        amountVND, status: "ACTIVE", usageHistory: [], createdAt: now,
+        amountVND, status: "ACTIVE", usageHistory: [],
+        startDate: now, expiryDate, createdAt: now,
       });
     } else if (productType === "SWIM_COURSE") {
       const start = startDateTs!.toDate();

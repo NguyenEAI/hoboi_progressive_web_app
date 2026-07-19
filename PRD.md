@@ -77,6 +77,7 @@ Nếu đưa vào dùng thật, lễ tân sẽ phải chuyển màn nhiều và O
 - Chọn 15 hoặc 30 lượt.
 - Chọn đối tượng giá.
 - Thu tiền xong tạo gói còn đủ lượt.
+- Gói lượt có hạn dùng 365 ngày tính từ ngày kích hoạt/thu tiền.
 
 ### FR-05 — Bán khóa học bơi
 
@@ -127,7 +128,7 @@ Nếu đưa vào dùng thật, lễ tân sẽ phải chuyển màn nhiều và O
 ### FR-11 — Quản lý vé/gói/khóa đang còn
 
 - Xem vé tháng/quý/năm còn hạn.
-- Xem vé lượt còn bao nhiêu lượt.
+- Xem vé lượt còn bao nhiêu lượt và hạn dùng. Vé lượt hết hạn sau 365 ngày không được dùng để check-in, dù trạng thái dữ liệu cũ còn là ACTIVE.
 - Xem khóa học còn bao nhiêu buổi.
 - Chặn hoặc tạm dừng khi cần, có lý do.
 
@@ -136,7 +137,7 @@ Nếu đưa vào dùng thật, lễ tân sẽ phải chuyển màn nhiều và O
 - Tìm khách bằng SĐT hoặc mã thẻ.
 - Hiện các vé/gói/khóa đang dùng được.
 - Vé tháng: xác nhận còn hạn.
-- Vé lượt: chọn số người, trừ lượt.
+- Vé lượt: chọn số người, trừ lượt; chặn gói đã hết hạn 365 ngày và hiển thị lý do đơn giản.
 - Khóa học: điểm danh buổi học.
 
 ### FR-13 — HLV và học viên

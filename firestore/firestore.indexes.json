@@ -29,6 +29,10 @@
       { "fieldPath": "userId", "order": "ASCENDING" },
       { "fieldPath": "status", "order": "ASCENDING" }
     ]},
+    { "collectionGroup": "ticketPackages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "expiryDate", "order": "ASCENDING" }
+    ]},
     { "collectionGroup": "enrollments", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "studentId", "order": "ASCENDING" },
       { "fieldPath": "status", "order": "ASCENDING" }

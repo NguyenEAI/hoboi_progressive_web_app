@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import type { TicketPackage } from "@/types";
 import { formatDate, toDate } from "@/lib/utils";
+import { getPackageExpiryDate, isPackageExpired } from "@/lib/packageExpiry";
 import { BackButton } from "@/components/BackButton";
 import { PackageCard, resolvePackageHolderName } from "@/components/MemberCard";
 import { Ticket, History, AlertCircle, TrendingDown } from "lucide-react";
@@ -86,6 +87,8 @@ export default function PackageDetailPage() {
   const used = pkg.totalSessions - pkg.remainingSessions;
   const usedPct = Math.round((used / pkg.totalSessions) * 100);
   const holderName = resolvePackageHolderName(pkg, orderBeneficiaryName || profile?.fullName || "");
+  const expiry = getPackageExpiryDate(pkg);
+  const expired = pkg.status === "EXPIRED" || isPackageExpired(pkg);
 
   return (
     <main className="mx-auto max-w-md pb-safe">
@@ -95,7 +98,7 @@ export default function PackageDetailPage() {
           <div>
             <h1 className="text-xl font-bold text-brand-800">Vé lượt MS{pkg.memberCode}</h1>
             <p className="text-xs text-slate-500">
-              {audienceLabel[pkg.audience] ?? pkg.audience} · còn {pkg.remainingSessions}/{pkg.totalSessions} lượt
+              {audienceLabel[pkg.audience] ?? pkg.audience} · {expired ? "đã hết hạn" : `còn ${pkg.remainingSessions}/${pkg.totalSessions} lượt`}
             </p>
           </div>
         </div>
@@ -111,8 +114,14 @@ export default function PackageDetailPage() {
         <section className="grid grid-cols-3 gap-2">
           <StatBox label="Đã dùng" value={`${used}`} sub={`${usedPct}%`} color="text-amber-600" />
           <StatBox label="Còn lại" value={`${pkg.remainingSessions}`} sub={`${100 - usedPct}%`} color="text-emerald-600" />
-          <StatBox label="Tổng" value={`${pkg.totalSessions}`} sub="lượt" color="text-slate-700" />
+          <StatBox label="HSD" value={expiry ? formatDate(expiry) : "-"} sub={expired ? "hết hạn" : "365 ngày"} color={expired ? "text-red-600" : "text-slate-700"} />
         </section>
+
+        {expired && (
+          <div className="rounded-xl border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">
+            Vé lượt đã hết hạn sau 365 ngày từ ngày kích hoạt. Vui lòng mua gói mới tại quầy.
+          </div>
+        )}
 
         {/* Lịch sử usage */}
         <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">

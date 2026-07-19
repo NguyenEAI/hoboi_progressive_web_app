@@ -7,6 +7,27 @@ service cloud.firestore {
     function isStaff() { return isSignedIn() && role() in ['OWNER','RECEPTIONIST']; }
     function isCoach() { return isSignedIn() && role() == 'COACH'; }
     function self(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function validChild(uid, cid) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'parentId', 'fullName', 'dob', 'heightCm', 'audience', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll(['id', 'parentId', 'fullName', 'heightCm', 'audience'])
+        && request.resource.data.id == cid
+        && request.resource.data.parentId == uid
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 1
+        && request.resource.data.fullName.size() <= 60
+        && request.resource.data.heightCm is int
+        && request.resource.data.heightCm >= 60
+        && request.resource.data.heightCm <= 220
+        && (
+          (request.resource.data.heightCm < 140 && request.resource.data.audience == 'CHILD_UNDER_140')
+          || (request.resource.data.heightCm >= 140 && request.resource.data.audience == 'CHILD_OVER_140')
+        )
+        && (!('dob' in request.resource.data)
+          || request.resource.data.dob == null
+          || request.resource.data.dob is timestamp);
+    }
 
     match /users/{uid} {
       allow read: if isStaff() || isCoach() || self(uid);
@@ -25,7 +46,9 @@ service cloud.firestore {
       allow delete: if false;
 
       match /children/{cid} {
-        allow read, write: if self(uid) || isStaff();
+        allow read: if self(uid) || isStaff();
+        allow create, update: if (self(uid) || isStaff()) && validChild(uid, cid);
+        allow delete: if self(uid) || isStaff();
       }
       match /notifications/{nid} {
         allow read, update: if self(uid);

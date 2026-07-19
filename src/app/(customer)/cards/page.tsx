@@ -9,6 +9,7 @@ import { CourseWalletCard, MembershipCard, PackageCard, resolvePackageHolderName
 import { SkeletonList } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { Wallet } from "lucide-react";
+import { isPackageExpired } from "@/lib/packageExpiry";
 
 export default function CardsPage() {
   const { profile, loading } = useAuthUser();
@@ -28,8 +29,18 @@ export default function CardsPage() {
         where("userId", "==", profile.id), where("status", "==", "ACTIVE")),
         (s) => { setMems(s.docs.map((d) => ({ id: d.id, ...d.data() } as Membership))); onLoaded(); }),
       onSnapshot(query(collection(db, "ticketPackages"),
-        where("userId", "==", profile.id), where("status", "==", "ACTIVE")),
-        (s) => { setPkgs(s.docs.map((d) => ({ id: d.id, ...d.data() } as TicketPackage))); onLoaded(); }),
+        where("userId", "==", profile.id)),
+        (s) => {
+          const list = s.docs.map((d) => ({ id: d.id, ...d.data() } as TicketPackage))
+            .sort((a, b) => {
+              const aExpired = isPackageExpired(a) || a.status === "EXPIRED";
+              const bExpired = isPackageExpired(b) || b.status === "EXPIRED";
+              if (aExpired !== bExpired) return aExpired ? 1 : -1;
+              return String(a.memberCode ?? "").localeCompare(String(b.memberCode ?? ""), "vi");
+            });
+          setPkgs(list);
+          onLoaded();
+        }),
       onSnapshot(query(collection(db, "enrollments"),
         where("studentId", "==", profile.id)),
         (s) => { setEnrollSelf(s.docs.map((d) => ({ id: d.id, ...d.data() } as Enrollment))); onLoaded(); }),

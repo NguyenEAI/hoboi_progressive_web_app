@@ -2,6 +2,12 @@
 
 ## 2026-07-19
 
+
+
+- Nâng cấp màn “Con của tôi”: khách có thể thêm, sửa và xoá hồ sơ con ngay trong app; form mới bắt buộc nhập chiều cao theo cm, tự gợi ý nhóm trẻ dưới 1.4m hoặc từ 1.4m trở lên, và vẫn giữ ngày sinh nếu có.
+- Khi xoá hồ sơ con, app kiểm tra vé thời hạn, vé lượt và khóa học đang hoạt động của chính khách trước; nếu bé còn được gắn với dịch vụ, app chặn xoá và hướng dẫn liên hệ lễ tân/Owner để xử lý an toàn.
+- Hồ sơ con cũ chưa có chiều cao vẫn đọc được bình thường nhưng được nhắc bổ sung; các màn mua vé/khóa và bán tại quầy dùng chiều cao hoặc nhóm đã lưu để gợi ý đúng nhóm trẻ em, không thay đổi bảng giá.
+
 - Vé thời hạn mới bắt buộc có ảnh thật của người dùng thẻ trước khi tạo đơn: khách có thể chụp bằng camera hoặc chọn ảnh trong máy, xem trước và chụp/chọn lại trước khi xác nhận.
 - Nút xác nhận đặt vé thời hạn chỉ mở sau khi ảnh đã upload thành công; server cũng từ chối tạo/kích hoạt PASS nếu thiếu ảnh hoặc ảnh không nằm đúng vùng lưu trữ của khách/người hưởng.
 - Bán vé thời hạn tại quầy cũng bắt buộc lễ tân chụp/chọn ảnh trước khi kích hoạt, bao gồm trường hợp mua cho con.

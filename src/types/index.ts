@@ -12,6 +12,7 @@ export type TS = { seconds: number; nanoseconds: number } | Date | string;
 export type Role = "OWNER" | "RECEPTIONIST" | "COACH" | "CUSTOMER" | "PARENT";
 
 export type Audience = "CHILD_UNDER_140" | "CHILD_OVER_140" | "ADULT";
+export type ChildAudience = Exclude<Audience, "ADULT">;
 
 export type PassDuration = "MONTH_1" | "MONTH_3" | "MONTH_6" | "YEAR_1";
 export type PackageSize = "PACK_15" | "PACK_30";
@@ -39,7 +40,7 @@ export type OrderStatus =
   | "REFUNDED";
 
 export type MembershipStatus = "ACTIVE" | "EXPIRED" | "SUSPENDED";
-export type PackageStatus = "ACTIVE" | "DEPLETED" | "SUSPENDED";
+export type PackageStatus = "ACTIVE" | "DEPLETED" | "EXPIRED" | "SUSPENDED";
 export type EnrollmentStatus =
   | "PENDING"
   | "ACTIVE"
@@ -73,9 +74,11 @@ export interface Child {
   parentId: string;
   fullName: string;
   dob?: TS;
-  // v2.3: chiều cao optional — audience được chọn lúc mua thẻ (INV-16)
+  // Hồ sơ cũ có thể thiếu heightCm; hồ sơ tạo/sửa mới bắt buộc có chiều cao.
   heightCm?: number;
-  audience?: Audience;
+  audience?: ChildAudience;
+  createdAt?: TS;
+  updatedAt?: TS;
 }
 
 // ---------- COACHES ----------
@@ -194,7 +197,10 @@ export interface TicketPackage {
     count: number; // số người check-in lần này
     checkinId: string;
   }[];
+  startDate?: TS; // New packages: activation date. Legacy packages may derive from createdAt.
+  expiryDate?: TS; // startDate + 365 days. Legacy packages may omit this field.
   createdAt: TS;
+  expiredAt?: TS;
 }
 
 export interface Enrollment {
