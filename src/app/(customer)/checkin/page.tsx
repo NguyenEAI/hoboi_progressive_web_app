@@ -2,22 +2,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
-import { checkinByQr, requestCheckin, cancelCheckinRequest } from "@/lib/callable";
-import { collection, doc, getDocs, onSnapshot, query, where } from "firebase/firestore";
+import { checkinByQr } from "@/lib/callable";
+import { collection, getDocs, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import type { Child, Membership, TicketPackage, Enrollment, CheckinRequest } from "@/types";
+import type { Child, Membership, TicketPackage, Enrollment } from "@/types";
 import { SWIM_STYLES } from "@/lib/constants";
 import { formatDate, toDate } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
-import { Camera, X, RotateCw, AlertTriangle, Clock, BookOpen, Ticket, CheckCircle2, IdCard } from "lucide-react";
+import { Camera, X, RotateCw, AlertTriangle, BookOpen, Ticket, CheckCircle2, IdCard } from "lucide-react";
 import Link from "next/link";
 import { BackButton } from "@/components/BackButton";
 
 // v2.4 (E2/INV-17): khách CHỌN thẻ trước khi quét QR (không có auto-pick theo giờ).
 // v2.4.1: VÉ THỜI HẠN KHÔNG quét QR — khách chỉ xuất trình thẻ ở /cards cho lễ tân xem.
 //   Chỉ check-in: khóa học (COURSE) + vé lượt (PACKAGE).
-// - BỎ HOÀN TOÀN UI "Số người cùng vào" — lễ tân chốt số lượt khi duyệt vé lượt.
-// - Khi quét: gửi forceKind + targetId lên server (COURSE) hoặc requestCheckin (PACKAGE).
+// - BỎ HOÀN TOÀN UI "Số người cùng vào" — số lượt cần trừ nằm trong QR token tại cổng.
+// - Khi quét: gửi forceKind + targetId lên server cho COURSE/PACKAGE.
 
 type Result = { ok: boolean; message: string };
 type CardKind = "COURSE" | "PACKAGE";
@@ -48,9 +48,6 @@ export default function CheckinPage() {
   const [enrolls, setEnrolls] = useState<Enrollment[]>([]);
 
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-
-  // v2.3 (D5): request đang chờ lễ tân duyệt (vé lượt)
-  const [pendingRequest, setPendingRequest] = useState<CheckinRequest | null>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -114,7 +111,7 @@ export default function CheckinPage() {
         id: p.id,
         title: `Vé lượt MS${p.memberCode}`,
         subtitle: `${audienceLabel(p.audience)} · Còn ${p.remainingSessions}/${p.totalSessions} lượt`,
-        meta: "Lễ tân sẽ chốt số lượt khi xác nhận",
+        meta: "Số lượt trừ theo mã QR tại cổng",
         accent: "from-amber-500 to-amber-700",
         icon: <Ticket className="size-5" />,
       });
@@ -144,51 +141,13 @@ export default function CheckinPage() {
         async (text) => {
           await stop();
           try {
-            // v2.4 E2: 3 nhánh xử lý theo loại thẻ khách chọn
-            if (selectedCard.kind === "PACKAGE") {
-              // Vé lượt → tạo request chờ lễ tân duyệt; suggestedCount = 1 (lễ tân chốt)
-              const r = await requestCheckin({
-                qrPayload: text,
-                ticketPackageId: selectedCard.id,
-                suggestedCount: 1,
-              });
-              const unsub = onSnapshot(
-                doc(db, `checkinRequests/${r.requestId}`),
-                (snap) => {
-                  if (!snap.exists()) return;
-                  const data = { id: snap.id, ...snap.data() } as CheckinRequest;
-                  setPendingRequest(data);
-                  if (data.status === "APPROVED") {
-                    const pkg = pkgs.find((p) => p.id === selectedCard.id);
-                    const remaining = (pkg?.remainingSessions ?? 0) - (data.approvedCount ?? 0);
-                    setResult({
-                      ok: true,
-                      message: `Lễ tân đã duyệt · trừ ${data.approvedCount} lượt · còn ${Math.max(0, remaining)} lượt`,
-                    });
-                    toast.show("Check-in thành công 🎉", "success");
-                    unsub();
-                    setPendingRequest(null);
-                  } else if (data.status === "REJECTED") {
-                    setResult({ ok: false, message: "Bị từ chối: " + (data.rejectReason ?? "") });
-                    toast.show("Lễ tân từ chối check-in", "error");
-                    unsub();
-                    setPendingRequest(null);
-                  } else if (data.status === "CANCELLED") {
-                    unsub();
-                    setPendingRequest(null);
-                  }
-                },
-              );
-              toast.show("Đang gửi yêu cầu đến lễ tân...", "info");
-              return;
-            }
-
-            // COURSE / MEMBERSHIP — trực tiếp với targetId + forceKind
+            // COURSE / PACKAGE — trực tiếp với targetId + forceKind.
+            // PACKAGE trừ ngay số lượt đã lưu trong QR token cổng.
             const r = await checkinByQr({
               qrPayload: text,
               forceKind: selectedCard.kind,
               targetId: selectedCard.id,
-              beneficiaryId: who === "self" ? undefined : who,
+              beneficiaryId: selectedCard.kind === "COURSE" && who !== "self" ? who : undefined,
             });
             setResult({ ok: true, message: r.message });
             toast.show("Check-in thành công 🎉", "success");
@@ -205,17 +164,6 @@ export default function CheckinPage() {
       setResult({ ok: false, message: m });
       toast.show(m, "error");
       setScanning(false);
-    }
-  }
-
-  async function cancelRequest() {
-    if (!pendingRequest) return;
-    try {
-      await cancelCheckinRequest({ requestId: pendingRequest.id });
-      setPendingRequest(null);
-      toast.show("Đã hủy yêu cầu", "info");
-    } catch (e) {
-      toast.show("Không hủy được: " + (e as Error).message, "error");
     }
   }
 
@@ -374,19 +322,6 @@ export default function CheckinPage() {
           <button onClick={stop} className="btn-secondary w-full">
             <X className="size-4" /> Dừng quét
           </button>
-        )}
-
-        {pendingRequest && pendingRequest.status === "PENDING" && (
-          <div className="animate-scale-in rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 text-center">
-            <Clock className="mx-auto size-10 animate-pulse text-amber-600" />
-            <div className="mt-2 font-bold text-amber-900">Đang chờ lễ tân duyệt...</div>
-            <div className="mt-1 text-sm text-amber-800">
-              Lễ tân sẽ kiểm tra thông tin vé + chốt số lượt rồi xác nhận.
-            </div>
-            <button onClick={cancelRequest} className="btn-secondary mt-3 w-full">
-              <X className="size-4" /> Hủy yêu cầu
-            </button>
-          </div>
         )}
 
         {result && (

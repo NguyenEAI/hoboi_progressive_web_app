@@ -262,10 +262,12 @@ export interface QrToken {
   issuedAt: TS;
   expiresAt: TS; // +30s
   used: boolean;
+  requestedCount: number;
+  adultsInGroup?: number;
 }
 
 // v2.3 (INV-15): khách quét QR vé lượt → tạo request chờ lễ tân duyệt
-export type CheckinRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type CheckinRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
 
 export interface CheckinRequest {
   id: string;
@@ -286,6 +288,7 @@ export interface CheckinRequest {
   resolvedAt?: TS;
   resolvedBy?: string; // uid lễ tân hoặc uid khách (CANCELLED)
   rejectReason?: string;
+  expireReason?: string;
   checkinId?: string;
 }
 

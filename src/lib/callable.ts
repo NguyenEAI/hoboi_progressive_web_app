@@ -47,7 +47,10 @@ export const extendService = call<
   { ok: boolean; kind: string; endDate?: string; totalSessions?: number; remainingSessions?: number }
 >("extendService");
 
-export const issueQrToken = call<{ requestedCount?: number }, { token: string; expiresAt: number; requestedCount?: number }>("issueQrToken");
+export const issueQrToken = call<
+  { requestedCount?: number; adultsInGroup?: number },
+  { token: string; expiresAt: number; requestedCount?: number }
+>("issueQrToken");
 export const checkinByQr = call<
   {
     qrPayload: string;
@@ -144,7 +147,7 @@ export const requestCheckin = call<
     suggestedCount: number;
     adultsInGroup?: number;
   },
-  { requestId: string }
+  { requestId: string | null; ok?: boolean; kind?: string; message?: string }
 >("requestCheckin");
 
 export const approveCheckin = call<

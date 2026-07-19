@@ -4,6 +4,11 @@ import * as crypto from "crypto";
 import { SWIM_COURSE_TOTAL_SESSIONS } from "./pricing";
 import { phoneVariants } from "./helpers";
 
+function positiveInt(value: unknown, fallback = 1): number {
+  const n = Math.floor(Number(value ?? fallback));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 const REGION = "asia-southeast1";
 const db = () => admin.firestore();
 const TTL_MS = 30_000; // QR đổi mỗi 30s
@@ -59,11 +64,23 @@ export const issueQrToken = onCall({ region: REGION }, async (req) => {
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Chỉ thiết bị quầy được phát QR");
   const nonce = crypto.randomBytes(16).toString("hex");
-  const requestedCount = Math.max(1, Math.floor(Number((req.data as any)?.requestedCount ?? 1)));
+  const requestedCount = positiveInt((req.data as any)?.requestedCount, 1);
+  const adultsInGroup = Math.min(
+    requestedCount,
+    Math.max(0, Math.floor(Number((req.data as any)?.adultsInGroup ?? 0))),
+  );
   const now = admin.firestore.Timestamp.now();
   const exp = admin.firestore.Timestamp.fromMillis(now.toMillis() + TTL_MS);
   const ref = db().collection("qrTokens").doc();
-  await ref.set({ id: ref.id, nonce, issuedAt: now, expiresAt: exp, used: false, requestedCount });
+  await ref.set({
+    id: ref.id,
+    nonce,
+    issuedAt: now,
+    expiresAt: exp,
+    used: false,
+    requestedCount,
+    ...(adultsInGroup > 0 ? { adultsInGroup } : {}),
+  });
   return { token: `${ref.id}:${nonce}`, expiresAt: exp.toMillis(), requestedCount };
 });
 
@@ -83,7 +100,17 @@ export const checkinByQr = onCall({ region: REGION }, async (req) => {
     if (t.nonce !== nonce) throw new HttpsError("invalid-argument", "QR không khớp");
     if (t.expiresAt.toMillis() < Date.now())
       throw new HttpsError("deadline-exceeded", "QR đã hết hạn, vui lòng quét lại");
-    return await resolveCheckin(tx, req.auth!.uid, d, tokenId, tokenRef);
+    return await resolveCheckin(
+      tx,
+      req.auth!.uid,
+      {
+        ...d,
+        groupSize: positiveInt(t.requestedCount, 1),
+        adultsInGroup: Number(t.adultsInGroup ?? d.adultsInGroup ?? 0),
+      },
+      tokenId,
+      tokenRef,
+    );
   });
   await afterCheckin(result);
   return result;
@@ -455,13 +482,12 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const viDate = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 
-// =====================================================================
-// v2.3 (D5, INV-15) — Vé lượt: khách quét QR → "yêu cầu chờ duyệt"
-// Lễ tân xem thông tin vé, chỉnh số lượt, bấm xác nhận → mới trừ thực tế.
-// Không TTL: request giữ PENDING vô hạn cho đến khi có hành động.
+// PACKAGE QR now deducts immediately from the QR token requestedCount.
+// Legacy checkinRequests are kept for history only and expire on approve/reject attempts.
 // =====================================================================
 
-// Khách quét QR vé lượt → tạo /checkinRequests/{id} status PENDING.
+// Compatibility callable: legacy clients may still call this for PACKAGE QR.
+// It now deducts immediately through the same path as checkinByQr; no new PENDING request is created.
 // data: { qrPayload, ticketPackageId, suggestedCount, adultsInGroup? }
 export const requestCheckin = onCall({ region: REGION }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
@@ -470,140 +496,63 @@ export const requestCheckin = onCall({ region: REGION }, async (req) => {
   const [tokenId, nonce] = String(d.qrPayload ?? "").split(":");
   if (!tokenId || !nonce) throw new HttpsError("invalid-argument", "QR không hợp lệ");
   if (!d.ticketPackageId) throw new HttpsError("invalid-argument", "Thiếu mã vé");
-  let suggestedCount = Math.max(1, Number(d.suggestedCount ?? 1));
-
   const tokenRef = db().doc(`qrTokens/${tokenId}`);
-  const pkgRef = db().doc(`ticketPackages/${d.ticketPackageId}`);
-  const userRef = db().doc(`users/${uid}`);
 
-  const requestId = await db().runTransaction(async (tx) => {
-    const [tok, pkg, user] = await Promise.all([tx.get(tokenRef), tx.get(pkgRef), tx.get(userRef)]);
+  const result = await db().runTransaction(async (tx) => {
+    const tok = await tx.get(tokenRef);
     if (!tok.exists) throw new HttpsError("invalid-argument", "QR không hợp lệ");
     const t = tok.data()!;
     if (t.used) throw new HttpsError("failed-precondition", "QR đã được dùng");
     if (t.nonce !== nonce) throw new HttpsError("invalid-argument", "QR không khớp");
     if (t.expiresAt.toMillis() < Date.now())
       throw new HttpsError("deadline-exceeded", "QR đã hết hạn, vui lòng quét lại");
-    suggestedCount = Math.max(1, Number(t.requestedCount ?? suggestedCount));
-
-    if (!pkg.exists) throw new HttpsError("not-found", "Vé không tồn tại");
-    const p = pkg.data()!;
-    if (p.userId !== uid) throw new HttpsError("permission-denied", "Vé không thuộc về bạn");
-    if (p.status !== "ACTIVE") throw new HttpsError("failed-precondition", "Vé không còn hoạt động");
-    if ((p.remainingSessions ?? 0) < suggestedCount)
-      throw new HttpsError("resource-exhausted", `Vé chỉ còn ${p.remainingSessions} lượt`);
-
-    // Consume QR (single-use)
-    tx.update(tokenRef, { used: true });
-
-    const ref = db().collection("checkinRequests").doc();
-    tx.set(ref, {
-      id: ref.id,
-      userId: uid,
-      userName: user.data()?.fullName ?? "",
-      userPhone: user.data()?.phone ?? "",
-      beneficiaryKind: "USER",
-      beneficiaryId: uid,
-      beneficiaryName: user.data()?.fullName ?? "",
-      ticketPackageId: d.ticketPackageId,
-      ticketRemaining: p.remainingSessions ?? 0,
-      suggestedCount,
-      adultsInGroup: Number(d.adultsInGroup ?? 0),
-      status: "PENDING",
-      qrTokenId: tokenId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return ref.id;
+    return await resolveCheckin(
+      tx,
+      uid,
+      {
+        ...d,
+        forceKind: "PACKAGE",
+        targetId: d.ticketPackageId,
+        groupSize: positiveInt(t.requestedCount, 1),
+        adultsInGroup: Number(t.adultsInGroup ?? d.adultsInGroup ?? 0),
+      },
+      tokenId,
+      tokenRef,
+    );
   });
 
-  return { requestId };
+  await afterCheckin(result);
+  return { ...result, requestId: null };
 });
 
-// Lễ tân duyệt → trừ lượt + tạo checkin.
+// Legacy PENDING requests are no longer actionable. Keep the doc for history and mark EXPIRED.
 // data: { requestId, approvedCount }
 export const approveCheckin = onCall({ region: REGION }, async (req) => {
   const role = req.auth?.token?.role;
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Không đủ quyền");
-  const { requestId, approvedCount } = req.data as { requestId: string; approvedCount: number };
-  const count = Math.max(1, Number(approvedCount ?? 1));
+  const { requestId } = req.data as { requestId: string; approvedCount?: number };
+  if (!requestId) throw new HttpsError("invalid-argument", "Thiếu yêu cầu check-in");
 
   const reqRef = db().doc(`checkinRequests/${requestId}`);
-  const result = await db().runTransaction(async (tx) => {
+  await db().runTransaction(async (tx) => {
     const snap = await tx.get(reqRef);
     if (!snap.exists) throw new HttpsError("not-found", "Yêu cầu không tồn tại");
     const r = snap.data()!;
     if (r.status !== "PENDING")
       throw new HttpsError("failed-precondition", `Yêu cầu đã ${r.status}`);
-
-    const pkgRef = db().doc(`ticketPackages/${r.ticketPackageId}`);
-    const pkg = await tx.get(pkgRef);
-    if (!pkg.exists) throw new HttpsError("not-found", "Vé không tồn tại");
-    const p = pkg.data()!;
-    if (p.status !== "ACTIVE") throw new HttpsError("failed-precondition", "Vé không còn hoạt động");
-    if ((p.remainingSessions ?? 0) < count)
-      throw new HttpsError("resource-exhausted", `Vé chỉ còn ${p.remainingSessions} lượt`);
-
-    const remaining = (p.remainingSessions ?? 0) - count;
-    const checkinId = db().collection("checkins").doc().id;
-
-    tx.update(pkgRef, {
-      remainingSessions: remaining,
-      status: remaining <= 0 ? "DEPLETED" : "ACTIVE",
-      usageHistory: admin.firestore.FieldValue.arrayUnion({
-        at: admin.firestore.Timestamp.now(),
-        count,
-        checkinId,
-      }),
-    });
-
-    tx.set(db().collection("checkins").doc(checkinId), {
-      id: checkinId,
-      userId: r.userId,
-      beneficiaryId: r.beneficiaryId,
-      kind: "PACKAGE",
-      refId: r.ticketPackageId,
-      qrTokenId: r.qrTokenId,
-      groupSize: count,
-      result: "ACCEPTED",
-      at: admin.firestore.Timestamp.now(),
-    });
-
     tx.update(reqRef, {
-      status: "APPROVED",
-      approvedCount: count,
+      status: "EXPIRED",
       resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
       resolvedBy: req.auth!.uid,
-      checkinId,
+      expireReason: "QR_PACKAGE_AUTO_DEDUCTION_ENABLED",
     });
-
-    return { userId: r.userId, count, remaining };
   });
 
-  // Notify khách
-  try {
-    await db().collection("users").doc(result.userId).collection("notifications").add({
-      title: "Đã trừ lượt thành công ✅",
-      body: `Lễ tân đã xác nhận check-in của bạn, trừ ${result.count} lượt. Còn lại ${result.remaining} lượt.`,
-      type: "GENERAL",
-      read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    const u = await db().doc(`users/${result.userId}`).get();
-    const tokens: string[] = u.data()?.fcmTokens ?? [];
-    if (tokens.length)
-      await admin.messaging().sendEachForMulticast({
-        tokens,
-        notification: {
-          title: "Check-in thành công",
-          body: `Đã trừ ${result.count} lượt · còn ${result.remaining} lượt`,
-        },
-      });
-  } catch (e) {
-    console.warn("notify approveCheckin failed", e);
-  }
-
-  return { ok: true, ...result };
+  throw new HttpsError(
+    "failed-precondition",
+    "Yêu cầu check-in cũ đã hết hiệu lực. Khách vui lòng quét QR mới để trừ lượt tự động.",
+  );
 });
 
 
@@ -725,36 +674,28 @@ export const rejectCheckin = onCall({ region: REGION }, async (req) => {
   const role = req.auth?.token?.role;
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Không đủ quyền");
-  const { requestId, reason } = req.data as { requestId: string; reason: string };
-  if (!reason?.trim()) throw new HttpsError("invalid-argument", "Vui lòng nhập lý do từ chối");
+  const { requestId } = req.data as { requestId: string; reason?: string };
+  if (!requestId) throw new HttpsError("invalid-argument", "Thiếu yêu cầu check-in");
 
   const reqRef = db().doc(`checkinRequests/${requestId}`);
-  const userId = await db().runTransaction(async (tx) => {
+  await db().runTransaction(async (tx) => {
     const snap = await tx.get(reqRef);
     if (!snap.exists) throw new HttpsError("not-found", "Yêu cầu không tồn tại");
     const r = snap.data()!;
     if (r.status !== "PENDING")
       throw new HttpsError("failed-precondition", `Yêu cầu đã ${r.status}`);
     tx.update(reqRef, {
-      status: "REJECTED",
-      rejectReason: String(reason).trim(),
+      status: "EXPIRED",
       resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
       resolvedBy: req.auth!.uid,
+      expireReason: "QR_PACKAGE_AUTO_DEDUCTION_ENABLED",
     });
-    return r.userId as string;
   });
 
-  try {
-    await db().collection("users").doc(userId).collection("notifications").add({
-      title: "Check-in bị từ chối",
-      body: `Lý do: ${reason}`,
-      type: "GENERAL",
-      read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  } catch {}
-
-  return { ok: true };
+  throw new HttpsError(
+    "failed-precondition",
+    "Yêu cầu check-in cũ đã hết hiệu lực. Khách vui lòng quét QR mới để trừ lượt tự động.",
+  );
 });
 
 // Khách tự hủy request (trước khi lễ tân duyệt).

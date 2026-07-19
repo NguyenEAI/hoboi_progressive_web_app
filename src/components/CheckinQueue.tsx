@@ -7,11 +7,26 @@ import { approveCheckin, rejectCheckin } from "@/lib/callable";
 import type { CheckinRequest, TicketPackage } from "@/types";
 import { Bell, BellOff, Check, X, AlertTriangle } from "lucide-react";
 
-// v2.3 (D5/INV-15) — hàng đợi check-in vé lượt chờ lễ tân duyệt.
-// v2.4 (E3) — thêm audio beep + visual flash khi có request mới + mute toggle (localStorage).
-// Hiển thị trên dashboard `/admin` cho cả OWNER và RECEPTIONIST.
+// Legacy check-in request queue. New PACKAGE QR check-ins deduct immediately, so these records are read-only reminders to ask the customer to scan again.
+// Keeps the old beep/flash behavior if a stale client still creates a PENDING request.
 
 const MUTE_KEY = "checkin-queue-mute";
+const LEGACY_PENDING_REQUEST_ACTION_WINDOW_MS = 2 * 60_000;
+
+function timeMs(value: unknown): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string") return new Date(value).getTime() || 0;
+  if (typeof value === "object" && value && "toMillis" in value && typeof (value as { toMillis?: unknown }).toMillis === "function") {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  return 0;
+}
+
+function isActionableLegacyRequest(r: CheckinRequest, nowMs: number): boolean {
+  const createdAtMs = timeMs(r.createdAt);
+  return createdAtMs > 0 && createdAtMs + LEGACY_PENDING_REQUEST_ACTION_WINDOW_MS >= nowMs;
+}
 
 // Beep tone đơn (880Hz · 0.3s) — không cần asset
 function beep() {
@@ -42,6 +57,7 @@ export function CheckinQueue() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string>();
   const [muted, setMuted] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
   const prevIdsRef = useRef<Set<string>>(new Set());
   const firstLoadRef = useRef(true);
@@ -51,6 +67,15 @@ export function CheckinQueue() {
     if (typeof window === "undefined") return;
     setMuted(window.localStorage.getItem(MUTE_KEY) === "1");
   }, []);
+
+  useEffect(() => {
+    const t = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    setItems((prev) => prev.filter((r) => isActionableLegacyRequest(r, nowMs)));
+  }, [nowMs]);
 
   function toggleMute() {
     setMuted((m) => {
@@ -71,7 +96,9 @@ export function CheckinQueue() {
       orderBy("createdAt", "asc"),
     );
     return onSnapshot(q, (s) => {
-      const list = s.docs.map((d) => ({ id: d.id, ...d.data() } as CheckinRequest));
+      const list = s.docs
+        .map((d) => ({ id: d.id, ...d.data() } as CheckinRequest))
+        .filter((r) => isActionableLegacyRequest(r, Date.now()));
       setItems(list);
       // Initialize counts với suggestedCount cho request mới
       setCounts((prev) => {
@@ -144,8 +171,8 @@ export function CheckinQueue() {
             {items.length}
           </span>
         </span>
-        <h2 className="font-bold text-amber-900">Hàng đợi check-in vé lượt</h2>
-        <span className="ml-auto text-xs text-amber-700">{items.length} chờ duyệt</span>
+        <h2 className="font-bold text-amber-900">Yêu cầu check-in vé lượt cũ</h2>
+        <span className="ml-auto text-xs text-amber-700">{items.length} cần quét lại</span>
         <button
           onClick={toggleMute}
           className="ml-1 flex size-7 items-center justify-center rounded-full text-amber-700 hover:bg-amber-200"
@@ -195,8 +222,8 @@ export function CheckinQueue() {
                     )}
                   </div>
                 </div>
-                <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                  CHỜ
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                  HẾT HIỆU LỰC
                 </span>
               </div>
 
@@ -212,10 +239,10 @@ export function CheckinQueue() {
                   <div className="mt-2 flex gap-2">
                     <button
                       onClick={() => reject(r)}
-                      disabled={busy === r.id || !reason.trim()}
+                      disabled
                       className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                      {busy === r.id ? "..." : "Xác nhận từ chối"}
+                      Hết hiệu lực
                     </button>
                     <button
                       onClick={() => {
@@ -234,7 +261,7 @@ export function CheckinQueue() {
                     <span className="text-xs text-slate-600">Số lượt trừ:</span>
                     <button
                       onClick={() => setCounts({ ...counts, [r.id]: Math.max(1, count - 1) })}
-                      disabled={count <= 1}
+                      disabled
                       className="flex size-8 items-center justify-center rounded-full bg-white text-lg font-bold text-slate-600 ring-1 ring-slate-200 disabled:opacity-40"
                     >
                       −
@@ -242,7 +269,7 @@ export function CheckinQueue() {
                     <span className="w-8 text-center font-bold tabular-nums">{count}</span>
                     <button
                       onClick={() => setCounts({ ...counts, [r.id]: Math.min(max, count + 1) })}
-                      disabled={count >= max}
+                      disabled
                       className="flex size-8 items-center justify-center rounded-full bg-brand-600 text-lg font-bold text-white disabled:opacity-40"
                     >
                       +
@@ -256,14 +283,14 @@ export function CheckinQueue() {
                   <div className="flex gap-1">
                     <button
                       onClick={() => approve(r)}
-                      disabled={busy === r.id}
+                      disabled
                       className="flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                      <Check className="size-4" /> Duyệt
+                      <Check className="size-4" /> Hết hiệu lực
                     </button>
                     <button
                       onClick={() => setReasonOpen(r.id)}
-                      disabled={busy === r.id}
+                      disabled
                       className="flex items-center gap-1 rounded-lg border-2 border-red-200 px-3 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
                     >
                       <X className="size-4" /> Từ chối
