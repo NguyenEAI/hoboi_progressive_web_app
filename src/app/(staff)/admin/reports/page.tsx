@@ -103,8 +103,6 @@ export default function ReportsPage() {
     );
   }, [profile?.role, range.start, range.end]);
 
-  if (profile && profile.role !== "OWNER") return <OwnerOnlyState />;
-
   const periodLabel = labelFor(mode, range, day, month, year, from, to);
   const previousLabel = `${previousRange.start.toLocaleDateString("vi-VN")} - ${previousRange.end.toLocaleDateString("vi-VN")}`;
   const matrix = buildMatrix(orders);
@@ -136,6 +134,10 @@ export default function ReportsPage() {
         .some((value) => String(value).toLowerCase().includes(needle)),
     );
   }, [orders, search]);
+
+  // Phải đặt sau toàn bộ hook ở trên: khi hồ sơ tải xong và là lễ tân,
+  // React vẫn nhận đúng số hook như lúc trạng thái đang tải.
+  if (profile && profile.role !== "OWNER") return <OwnerOnlyState />;
 
   function exportCsv() {
     const rows = [
