@@ -22,6 +22,7 @@ export {
   updateCustomerName,
   deleteCustomer,
 } from "./staff";
+export { ownerUpdateCustomerProfile, ownerUpdateCustomerService } from "./customerAdmin";
 export { updatePricing, upsertCoach, setCoachActive, deleteOrder, sendPromotion } from "./admin";
 // v2.4 (E4) — màn HLV: ghi chú HV + báo nghỉ ca
 export { addCoachNote, reportCoachAbsence } from "./coach";

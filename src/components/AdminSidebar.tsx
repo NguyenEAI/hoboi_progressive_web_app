@@ -12,7 +12,8 @@ const GROUPS: { title: string; items: { href: string; label: string; ownerOnly?:
     { href: "/admin", label: "🏠 Dashboard" },
     { href: "/admin/counter-sale", label: "💳 Bán vé/lớp" },
     { href: "/admin/orders", label: "📋 Đơn hàng" },
-    { href: "/admin/qr-gate", label: "🚪 Màn hình QR cổng" },
+    { href: "/admin/qr-gate", label: "🚪 QR vé lượt tại cổng" },
+    { href: "/admin/course-qr", label: "🏊 QR điểm danh khóa học" },
     { href: "/admin/checkin-assist", label: "📷 Điểm danh hộ" },
   ]},
   { title: "Quản lý", items: [

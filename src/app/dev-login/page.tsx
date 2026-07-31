@@ -23,6 +23,17 @@ function landingFor(role?: string) {
 export default function DevLoginPage() {
   const router = useRouter();
   const [message, setMessage] = useState("Chọn tài khoản test để vào app.");
+  const enabled = process.env.NODE_ENV !== "production"
+    && process.env.NEXT_PUBLIC_E2E_DISABLE_APP_VERIFICATION === "1";
+
+  if (!enabled) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-3 p-6 text-center">
+        <h1 className="text-2xl font-extrabold text-brand-900">Không mở trang kiểm thử</h1>
+        <p className="text-sm text-slate-500">Trang này chỉ hoạt động trên máy kiểm thử nội bộ.</p>
+      </main>
+    );
+  }
 
   async function login(phone: string) {
     setMessage("Đang vào app...");

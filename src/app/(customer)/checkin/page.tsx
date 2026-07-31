@@ -18,6 +18,7 @@ import { BackButton } from "@/components/BackButton";
 // v2.4 (E2/INV-17): khách CHỌN thẻ trước khi quét QR (không có auto-pick theo giờ).
 // v2.4.1: VÉ THỜI HẠN KHÔNG quét QR — khách chỉ xuất trình thẻ ở /cards cho lễ tân xem.
 //   Chỉ check-in: khóa học (COURSE) + vé lượt (PACKAGE).
+// - QR khóa học dùng màn /admin/course-qr riêng, token purpose=COURSE nên không thể trừ vé lượt.
 // - BỎ HOÀN TOÀN UI "Số người cùng vào" — số lượt cần trừ nằm trong QR token tại cổng.
 // - Khi quét: gửi forceKind + targetId lên server cho COURSE/PACKAGE.
 
@@ -100,7 +101,7 @@ export default function CheckinPage() {
         id: e.id,
         title: `Khóa học ${styleEmoji(e.swimStyle)} ${e.studentName}`,
         subtitle: `HLV ${e.coachName} · ${e.attendedSessions ?? 0}/${e.totalSessions} buổi`,
-        meta: `Hết hạn ${formatDate(e.expiryDate)}`,
+        meta: `Quét QR điểm danh khóa học · Hết hạn ${formatDate(e.expiryDate)}`,
         accent: "from-cyan-500 to-cyan-700",
         icon: <BookOpen className="size-5" />,
       });
@@ -189,7 +190,7 @@ export default function CheckinPage() {
           <div>
             <h1 className="text-xl font-bold text-brand-800">Check-in</h1>
             <p className="text-xs text-slate-500">
-              Chọn thẻ → quét mã QR <b className="text-slate-700">trên màn hình tablet ở cổng</b>
+              Chọn thẻ → quét đúng màn QR: <b className="text-slate-700">khóa học</b> hoặc <b className="text-slate-700">vé lượt tại cổng</b>
             </p>
           </div>
         </div>

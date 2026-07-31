@@ -14,6 +14,19 @@ const REGION = "asia-southeast1";
 const db = () => admin.firestore();
 const TTL_MS = 30_000; // QR đổi mỗi 30s
 
+export type QrPurpose = "VISIT" | "COURSE";
+export function normalizeQrPurpose(value: unknown): QrPurpose {
+  return String(value ?? "VISIT").toUpperCase() === "COURSE" ? "COURSE" : "VISIT";
+}
+
+export function assertQrPurposeCanUseKind(purpose: QrPurpose, requestedKind?: string) {
+  const kind = String(requestedKind ?? "").toUpperCase();
+  if (purpose === "COURSE" && kind && kind !== "COURSE")
+    throw new HttpsError("failed-precondition", "QR này chỉ dùng để điểm danh khóa học, không dùng để trừ vé lượt/vé thời hạn.");
+  if (purpose !== "COURSE" && kind === "COURSE")
+    throw new HttpsError("failed-precondition", "QR cổng này chỉ dùng cho vé lượt. Vui lòng quét màn QR điểm danh khóa học.");
+}
+
 // v2.4 (E1) — Tra uid khách theo SĐT.
 // v2.4.1: nếu Auth có user nhưng Firestore không có → auto-create doc placeholder
 // (đồng bộ với searchCustomerByPhone). Trả uid để check-in tiếp tục.
@@ -65,11 +78,14 @@ export const issueQrToken = onCall({ region: REGION }, async (req) => {
   if (!["OWNER", "RECEPTIONIST"].includes(role))
     throw new HttpsError("permission-denied", "Chỉ thiết bị quầy được phát QR");
   const nonce = crypto.randomBytes(16).toString("hex");
-  const requestedCount = positiveInt((req.data as any)?.requestedCount, 1);
-  const adultsInGroup = Math.min(
-    requestedCount,
-    Math.max(0, Math.floor(Number((req.data as any)?.adultsInGroup ?? 0))),
-  );
+  const purpose = normalizeQrPurpose((req.data as any)?.purpose ?? (req.data as any)?.qrPurpose);
+  const requestedCount = purpose === "COURSE" ? 1 : positiveInt((req.data as any)?.requestedCount, 1);
+  const adultsInGroup = purpose === "COURSE"
+    ? 0
+    : Math.min(
+        requestedCount,
+        Math.max(0, Math.floor(Number((req.data as any)?.adultsInGroup ?? 0))),
+      );
   const now = admin.firestore.Timestamp.now();
   const exp = admin.firestore.Timestamp.fromMillis(now.toMillis() + TTL_MS);
   const ref = db().collection("qrTokens").doc();
@@ -79,10 +95,11 @@ export const issueQrToken = onCall({ region: REGION }, async (req) => {
     issuedAt: now,
     expiresAt: exp,
     used: false,
+    purpose,
     requestedCount,
     ...(adultsInGroup > 0 ? { adultsInGroup } : {}),
   });
-  return { token: `${ref.id}:${nonce}`, expiresAt: exp.toMillis(), requestedCount };
+  return { token: `${ref.id}:${nonce}`, expiresAt: exp.toMillis(), requestedCount, purpose };
 });
 
 // ===== Khách quét QR =====
@@ -101,13 +118,17 @@ export const checkinByQr = onCall({ region: REGION }, async (req) => {
     if (t.nonce !== nonce) throw new HttpsError("invalid-argument", "QR không khớp");
     if (t.expiresAt.toMillis() < Date.now())
       throw new HttpsError("deadline-exceeded", "QR đã hết hạn, vui lòng quét lại");
+    const purpose = normalizeQrPurpose(t.purpose);
+    assertQrPurposeCanUseKind(purpose, d.forceKind);
     return await resolveCheckin(
       tx,
       req.auth!.uid,
       {
         ...d,
-        groupSize: positiveInt(t.requestedCount, 1),
-        adultsInGroup: Number(t.adultsInGroup ?? d.adultsInGroup ?? 0),
+        ...(purpose === "COURSE" ? { forceKind: "COURSE", groupSize: 1, adultsInGroup: 0 } : {
+          groupSize: positiveInt(t.requestedCount, 1),
+          adultsInGroup: Number(t.adultsInGroup ?? d.adultsInGroup ?? 0),
+        }),
       },
       tokenId,
       tokenRef,
@@ -512,6 +533,9 @@ export const requestCheckin = onCall({ region: REGION }, async (req) => {
     if (t.nonce !== nonce) throw new HttpsError("invalid-argument", "QR không khớp");
     if (t.expiresAt.toMillis() < Date.now())
       throw new HttpsError("deadline-exceeded", "QR đã hết hạn, vui lòng quét lại");
+    const purpose = normalizeQrPurpose(t.purpose);
+    if (purpose === "COURSE")
+      throw new HttpsError("failed-precondition", "QR này chỉ dùng để điểm danh khóa học, không dùng để trừ vé lượt.");
     return await resolveCheckin(
       tx,
       uid,

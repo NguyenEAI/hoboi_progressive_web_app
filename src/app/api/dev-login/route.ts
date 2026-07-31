@@ -20,7 +20,7 @@ function normalizePhone(input: string) {
 }
 
 export async function GET(req: NextRequest) {
-  if (process.env.NEXT_PUBLIC_E2E_DISABLE_APP_VERIFICATION !== "1") {
+  if (process.env.NODE_ENV === "production" || process.env.E2E_DISABLE_APP_VERIFICATION !== "1") {
     return NextResponse.json({ error: "Chỉ mở trong chế độ kiểm thử nội bộ" }, { status: 403 });
   }
   try {

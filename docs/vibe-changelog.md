@@ -1,5 +1,30 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-07-31
+
+- Nâng cấp màn HLV `/coach` thành bảng vận hành mobile-first: hiển thị tổng học viên, lịch hôm nay, ca kế tiếp, các mục cần theo dõi và lối tắt tìm học viên/báo nghỉ ca.
+- HLV vẫn chỉ xem lịch sử điểm danh, không có nút tự điểm danh hay đánh dấu vắng học viên. Luồng QR/check-in và quyền lễ tân/Owner không thay đổi.
+- Khi HLV báo nghỉ ca, app chỉ ghi nhận báo nghỉ và nhắc nội bộ cần lễ tân/Owner follow-up lịch bù sau; không tạo luồng đề xuất hoặc tự sắp lịch bù.
+- Trang `Học viên` của HLV được làm lại dễ đọc hơn: tìm kiếm rõ, badge học viên vắng liên tiếp/gần hết buổi/gần hết hạn, mở chi tiết từ cảnh báo, giữ ghi chú append-only và lịch sử điểm danh chỉ xem.
+
+- Thiết kế lại Dashboard Owner tại `/admin` theo hướng điều hành dày thông tin hơn: KPI hôm nay, so sánh hôm qua, doanh thu tháng, cơ cấu dịch vụ, lưu lượng theo giờ, giao dịch mới và cảnh báo cần xử lý.
+- Dashboard chỉ dùng dữ liệu thật từ `orders`, `checkins`, `checkinRequests`; khi chưa có dữ liệu sẽ hiện trạng thái trống rõ ràng thay vì để màn hình loãng.
+- Thiết kế lại `/admin/reports` cho Owner với bộ chọn kỳ dễ đọc, KPI so với kỳ trước, biểu đồ xu hướng, bảng Loại × Đối tượng, top khách hàng, danh sách giao dịch và xuất CSV theo bộ lọc.
+- Giữ nguyên giới hạn quyền: báo cáo tài chính vẫn Owner-only, lễ tân không thấy tổng doanh thu. Không thay đổi QR/check-in, khách hàng, HLV, auth hoặc deploy.
+
+- Thêm hồ sơ khách hàng 360 cho Owner từ màn `Khách hàng`: xem toàn bộ hồ sơ liên hệ, trẻ em, dịch vụ đang dùng và đã qua, đơn hàng/thanh toán, check-in, điểm danh khóa học và audit liên quan.
+- Owner có thể sửa hồ sơ khách và chỉnh trạng thái/chi tiết dịch vụ trong phạm vi dữ liệu hiện có; mỗi lần sửa bắt buộc nhập lý do, lưu trước/sau và ghi audit bền vững. Lễ tân vẫn chỉ được sửa tên khách như trước.
+- Các lịch sử đơn hàng, thanh toán, check-in và điểm danh chỉ xem, không có thao tác xóa. Phần này không thay đổi QR/check-in, dashboard/báo cáo, màn HLV, auth hoặc cấu hình deploy.
+
+- Thêm màn quản trị `QR điểm danh khóa học` riêng cho lễ tân/Owner. Mã này được phát với mục đích COURSE, ghi rõ chỉ dùng để điểm danh khóa học và tự đổi mỗi 30 giây.
+- Mã QR cổng hiện được giữ riêng cho vé lượt tại cổng. Backend chặn dùng QR khóa học để trừ vé lượt/vé thời hạn, đồng thời chặn dùng QR cổng để điểm danh khóa học.
+- Luồng khách khi chọn thẻ khóa học vẫn dùng enrollment đang hoạt động, kiểm đúng người học/phụ huynh, đúng ngày học, chưa hết hạn và không cho điểm danh trùng trong cùng ngày.
+- Thêm kiểm thử nhỏ cho phần phân loại QR COURSE/VISIT và chạy lại typecheck/build thành công.
+- Viết lại bộ kiểm tra đăng nhập theo SĐT + mật khẩu, bổ sung kiểm tra phân quyền đủ bốn vai và kiểm trực tiếp các yêu cầu về thẻ khóa học, tên người dùng thẻ và ảnh vé thời hạn.
+- Tạo bộ tài khoản test riêng cho khách, lễ tân và HLV để các lần kiểm tra sau không phải đổi quyền tài khoản khách cũ.
+- Hiệu chỉnh báo cáo kiểm thử thành đạt/chưa đủ/bị chặn theo đúng bằng chứng; không còn dùng kết luận “đã kiểm đầy đủ bốn vai” cho các nghiệp vụ chưa chạy.
+- Gỡ tài khoản mới khỏi trang đăng nhập nội bộ, xác nhận lối này mặc định bị khóa và xoay lại mật khẩu các tài khoản test.
+
 ## 2026-07-19
 
 
@@ -36,9 +61,9 @@
 - Đợt tiếp theo: thêm màn owner tạo khuyến mãi/thông báo theo nhóm, mặc định có gửi thử theo SĐT.
 - Đợt tiếp theo: thêm chọn số lượt trên màn QR và bắt buộc lý do khi lễ tân xác nhận hộ vé lượt.
 
-- Th�m th? hu?ng d?n d? kh�ch/l? t�n d? dua app h? boi ra m�n h�nh di?n tho?i; c� n�t th�m nhanh v� hu?ng d?n tay cho iPhone/Android.
+- Th�m th? hu?ng d?n d? kh�ch/l? t�n d? dua app h? boi ra m�n h�nh di?n tho?i; c� n�t th�m nhanh v� hu?ng d?n tay cho iPhone/Android.
 
-- Th�m m�n c�i app ri�ng d? kh�ch b?m m?t n�t; Android hi?n x�c nh?n th�m app, m�y Apple th?y hu?ng d?n ng?n ngay trong app.
+- Th�m m�n c�i app ri�ng d? kh�ch b?m m?t n�t; Android hi?n x�c nh?n th�m app, m�y Apple th?y hu?ng d?n ng?n ngay trong app.
 
 ## 2026-07-17
 

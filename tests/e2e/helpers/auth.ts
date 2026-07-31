@@ -1,47 +1,58 @@
 import { Page, expect } from "@playwright/test";
 
+export type RoleKey = "customer" | "owner" | "receptionist" | "coach";
+
+export type PasswordUser = {
+  phoneRaw: string;
+  password: string;
+};
+
 /**
- * Test phone numbers + OTP cố định cần được Owner thêm vào Firebase Console:
- *   Authentication → Sign-in method → Phone → "Phone numbers for testing"
+ * Live E2E credentials are intentionally environment-driven.
  *
- * +84900000001  →  111111  (CUSTOMER mặc định)
- * +84900000002  →  222222  (CUSTOMER có con — seed 1 bé tên Linh 130cm)
- * +84900000003  →  333333  (RECEPTIONIST — Owner cần gán role qua /admin/staff)
+ * Required per role:
+ *   E2E_CUSTOMER_PHONE + E2E_CUSTOMER_PASSWORD
+ *   E2E_OWNER_PHONE + E2E_OWNER_PASSWORD
+ *   E2E_RECEPTIONIST_PHONE + E2E_RECEPTIONIST_PASSWORD
+ *   E2E_COACH_PHONE + E2E_COACH_PASSWORD
  *
- * Owner thật (+84947010978) KHÔNG dùng trong e2e vì cần OTP SMS thật.
+ * Phone should be local VN form (0xxxxxxxxx) or E.164 (+84xxxxxxxxx). Tests normalize to local input.
+ * Do not hard-code real account secrets in this repository.
  */
-export const TEST_USERS = {
-  customer: { phoneRaw: "0900000001", e164: "+84900000001", otp: "111111" },
-  parent:   { phoneRaw: "0900000002", e164: "+84900000002", otp: "222222" },
-  staff:    { phoneRaw: "0900000003", e164: "+84900000003", otp: "333333" },
-} as const;
-
-/** Đăng nhập qua OTP test number. Đợi cho tới khi điều hướng về trang sau signin. */
-export async function signIn(
-  page: Page,
-  user: { phoneRaw: string; otp: string },
-  opts: { expectName?: boolean } = {},
-) {
-  await page.goto("/signin");
-
-  // Step phone
-  await page.getByPlaceholder(/0947010978/i).fill(user.phoneRaw);
-  await page.getByRole("button", { name: /gửi mã otp/i }).click();
-
-  // Step OTP (đợi step chuyển)
-  await expect(page.getByRole("heading", { name: /nhập mã otp/i })).toBeVisible({ timeout: 30_000 });
-  await page.getByPlaceholder("••••••").fill(user.otp);
-  await page.getByRole("button", { name: /xác nhận/i }).click();
-
-  if (opts.expectName) {
-    await expect(page.getByRole("heading", { name: /hoàn tất hồ sơ/i })).toBeVisible({ timeout: 10_000 });
-  } else {
-    // Đợi điều hướng khỏi /signin
-    await page.waitForURL((url) => !url.pathname.includes("/signin"), { timeout: 15_000 });
-  }
+export function getPasswordUser(role: RoleKey): PasswordUser | null {
+  const prefix = `E2E_${role.toUpperCase()}`;
+  const phone = process.env[`${prefix}_PHONE`];
+  const password = process.env[`${prefix}_PASSWORD`];
+  if (!phone || !password) return null;
+  return { phoneRaw: toLocalVNPhone(phone), password };
 }
 
-/** Logout — click "Đăng xuất" trong /profile */
+export function missingCredentialsReason(role: RoleKey) {
+  const prefix = `E2E_${role.toUpperCase()}`;
+  return `Skipped: set ${prefix}_PHONE and ${prefix}_PASSWORD to run this live ${role.toUpperCase()} phone+password test. Existing cloud accounts may not have password providers.`;
+}
+
+function toLocalVNPhone(phone: string) {
+  const trimmed = phone.trim();
+  if (/^0\d{9}$/.test(trimmed)) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.startsWith("84") && digits.length === 11) return `0${digits.slice(2)}`;
+  return digits.slice(-10);
+}
+
+/** Đăng nhập bằng flow hiện tại: số điện thoại + mật khẩu. */
+export async function signInWithPassword(page: Page, user: PasswordUser) {
+  await page.goto("/signin");
+  await expect(page.getByRole("heading", { name: /^đăng nhập$/i })).toBeVisible();
+
+  await page.getByPlaceholder(/0947010978/i).fill(user.phoneRaw);
+  await page.getByPlaceholder(/ít nhất 6 ký tự/i).fill(user.password);
+  await page.getByRole("button", { name: /^đăng nhập$/i }).click();
+
+  await page.waitForURL((url) => !url.pathname.includes("/signin"), { timeout: 20_000 });
+}
+
+/** Logout — click "Đăng xuất" trong /profile hoặc header role-specific nếu có. */
 export async function signOut(page: Page) {
   await page.goto("/profile");
   await page.getByRole("button", { name: /đăng xuất/i }).click();

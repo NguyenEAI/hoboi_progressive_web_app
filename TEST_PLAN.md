@@ -10,7 +10,8 @@
 - [x] Nút bắt đầu vào được màn đăng nhập.
 - [x] Màn mở đầu không bị tràn ngang trên điện thoại.
 - [x] Dòng bảo mật/PDPL còn hiển thị.
-- [ ] Đăng nhập bằng số test đang bị kẹt ở bước gửi OTP trong môi trường kiểm thử tự động; cần xử lý trước khi chạy sâu luồng khách/quầy.
+- [x] Smoke public vẫn chạy không cần đăng nhập.
+- [ ] Đăng nhập live hiện dùng số điện thoại + mật khẩu (không còn OTP cho login). Bộ Playwright đã đổi sang credentials qua biến môi trường và sẽ skip rõ lý do nếu thiếu tài khoản/mật khẩu.
 
 ## Cần kiểm thử bằng dữ liệu thật/mẫu
 
@@ -53,6 +54,30 @@
 - [ ] Báo cáo hôm nay tính được tiền từ đơn bán tại quầy.
 - [ ] Owner xem lại được đơn.
 - [ ] Lễ tân không xóa được lịch sử tiền.
+
+## Playwright live-role credentials
+
+Không commit mật khẩu vào repo. Muốn chạy các bài live đăng nhập/phân quyền, set biến môi trường trước khi chạy:
+
+```powershell
+$env:E2E_CUSTOMER_PHONE="0xxxxxxxxx"; $env:E2E_CUSTOMER_PASSWORD="..."
+$env:E2E_OWNER_PHONE="0xxxxxxxxx"; $env:E2E_OWNER_PASSWORD="..."
+$env:E2E_RECEPTIONIST_PHONE="0xxxxxxxxx"; $env:E2E_RECEPTIONIST_PASSWORD="..."
+$env:E2E_COACH_PHONE="0xxxxxxxxx"; $env:E2E_COACH_PASSWORD="..."
+npm run test:e2e -- tests/e2e/signin.spec.ts tests/e2e/role-routing.spec.ts tests/e2e/customer-cards.spec.ts --project=mobile-chrome
+```
+
+Nếu biến môi trường thiếu, các bài role/customer live sẽ `skip` với lý do rõ ràng vì một số tài khoản cloud cũ chỉ có Phone provider và chưa có Password provider.
+
+## Coverage mới cần giữ
+
+- [ ] CUSTOMER đăng nhập bằng số + mật khẩu và vào `/home`.
+- [ ] OWNER đăng nhập vào `/admin`, xem được báo cáo, kiểm tra route không dành cho owner theo hướng không phá dữ liệu.
+- [ ] RECEPTIONIST đăng nhập vào `/admin`, vào được điểm danh hộ, bị chặn khỏi báo cáo owner-only.
+- [ ] COACH đăng nhập vào `/coach`, xem được khu vực học viên, bị redirect khỏi `/admin`.
+- [ ] Customer `/cards` hiển thị tên chủ thẻ/người học và course card khi account có dữ liệu mẫu.
+- [ ] Customer `/my-courses` hiển thị tên học viên/trạng thái khi account có khóa học mẫu.
+- [ ] UI mua vé thời hạn nhắc bắt buộc có ảnh thật trước khi xác nhận.
 
 ## Ghi chú
 

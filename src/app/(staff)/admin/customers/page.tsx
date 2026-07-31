@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { collection, onSnapshot, query, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
@@ -10,7 +11,7 @@ import {
   deleteCustomer,
 } from "@/lib/callable";
 import { useToast } from "@/components/Toast";
-import { RefreshCw, Pencil, Trash2, UserPlus, X } from "lucide-react";
+import { RefreshCw, Pencil, Trash2, UserPlus, X, Eye } from "lucide-react";
 import type { User } from "@/types";
 import { formatDate, toDate } from "@/lib/utils";
 
@@ -207,6 +208,15 @@ export default function CustomersPage() {
                       >
                         <Pencil className="size-4" />
                       </button>
+                      {isOwner && (
+                        <Link
+                          href={`/admin/customers/${u.id}`}
+                          title="Hồ sơ 360"
+                          className="rounded-lg p-1.5 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          <Eye className="size-4" />
+                        </Link>
+                      )}
                       {isOwner && (
                         <button
                           onClick={() => setDeletingUid(u.id)}

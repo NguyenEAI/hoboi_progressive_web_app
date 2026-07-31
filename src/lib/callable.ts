@@ -50,8 +50,8 @@ export const extendService = call<
 >("extendService");
 
 export const issueQrToken = call<
-  { requestedCount?: number; adultsInGroup?: number },
-  { token: string; expiresAt: number; requestedCount?: number }
+  { requestedCount?: number; adultsInGroup?: number; purpose?: "VISIT" | "COURSE"; qrPurpose?: "VISIT" | "COURSE" },
+  { token: string; expiresAt: number; requestedCount?: number; purpose?: "VISIT" | "COURSE" }
 >("issueQrToken");
 export const checkinByQr = call<
   {
@@ -121,6 +121,32 @@ export const updateCustomerName = call<
   { ok: boolean }
 >("updateCustomerName");
 export const deleteCustomer = call<{ uid: string }, { ok: boolean }>("deleteCustomer");
+export const ownerUpdateCustomerProfile = call<
+  {
+    uid: string;
+    reason: string;
+    patch: {
+      fullName?: string;
+      phone?: string;
+      address?: string;
+      dob?: string | null;
+      heightCm?: number | "" | null;
+      audience?: string | null;
+      disabled?: boolean;
+    };
+  },
+  { ok: boolean; fields: string[] }
+>("ownerUpdateCustomerProfile");
+export const ownerUpdateCustomerService = call<
+  {
+    customerId: string;
+    kind: "MEMBERSHIP" | "PACKAGE" | "COURSE";
+    serviceId: string;
+    reason: string;
+    patch: Record<string, unknown>;
+  },
+  { ok: boolean; fields: string[] }
+>("ownerUpdateCustomerService");
 
 // v2.4 (E4) — HLV ghi chú HV + báo nghỉ ca
 export const addCoachNote = call<

@@ -1,54 +1,40 @@
-﻿import { test, expect } from "@playwright/test";
-import { TEST_USERS, signIn } from "./helpers/auth";
+import { test, expect } from "@playwright/test";
+import { getPasswordUser, missingCredentialsReason, signInWithPassword } from "./helpers/auth";
 
 /**
- * Sign-in flow â€” TEST-PLAN Â§4.2
- * Cáº§n test numbers Ä‘Ã£ setup trong Firebase Console.
+ * Sign-in flow — TEST-PLAN §4.2
+ * Current production flow is phone + password. OTP is only used for password reset.
  */
-test.describe("Sign-in (TEST-PLAN Â§4.2)", () => {
-  test("SI-01 Â· Customer login â†’ vÃ o /home", async ({ page }) => {
-    await signIn(page, TEST_USERS.customer);
+test.describe("Sign-in (phone + password)", () => {
+  test("SI-01 · Customer login → vào /home", async ({ page }) => {
+    const customer = getPasswordUser("customer");
+    test.skip(!customer, missingCredentialsReason("customer"));
+
+    await signInWithPassword(page, customer!);
     await expect(page).toHaveURL(/\/home/, { timeout: 15_000 });
   });
 
-  test("SI-02 Â· Login láº¡i (Ä‘Ã£ cÃ³ doc) â†’ bá» qua bÆ°á»›c nháº­p tÃªn", async ({ page }) => {
-    // Láº§n Ä‘áº§u â€” náº¿u user chÆ°a cÃ³ fullName, sáº½ hiá»‡n bÆ°á»›c name. Skip á»Ÿ Ä‘Ã¢y vÃ¬
-    // giáº£ Ä‘á»‹nh Owner Ä‘Ã£ pre-seed fullName cho test numbers.
-    await signIn(page, TEST_USERS.customer);
-    await expect(page).toHaveURL(/\/home/, { timeout: 15_000 });
+  test("SI-02 · Missing password shows validation without sending OTP", async ({ page }) => {
+    await page.goto("/signin");
+    await page.getByPlaceholder(/0947010978/i).fill("0900000001");
+    await page.getByRole("button", { name: /^đăng nhập$/i }).click();
+    await expect(page.getByText(/vui lòng nhập mật khẩu/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/signin/);
   });
 
-  test("SI-05 Â· Resend OTP cÃ³ countdown 60s", async ({ page }) => {
+  test("SI-03 · Wrong password shows safe error", async ({ page }) => {
     await page.goto("/signin");
-    await page.getByPlaceholder(/0947010978/i).fill(TEST_USERS.customer.phoneRaw);
-    await page.getByRole("button", { name: /OTP/i }).click();
-    await expect(page.getByText(/gá»­i láº¡i sau \d+s/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByPlaceholder(/0947010978/i).fill("0900000001");
+    await page.getByPlaceholder(/ít nhất 6 ký tự/i).fill("wrong-password-for-e2e");
+    await page.getByRole("button", { name: /^đăng nhập$/i }).click();
+    await expect(page.getByText(/số điện thoại hoặc mật khẩu chưa đúng|chưa thực hiện được/i)).toBeVisible({ timeout: 15_000 });
   });
 
-  test("SI-06 Â· OTP sai â†’ toast lá»—i", async ({ page }) => {
+  test("SI-04 · Forgot password remains OTP-gated", async ({ page }) => {
     await page.goto("/signin");
-    await page.getByPlaceholder(/0947010978/i).fill(TEST_USERS.customer.phoneRaw);
-    await page.getByRole("button", { name: /OTP/i }).click();
-
-    await expect(page.getByRole("heading", { name: /nháº­p mÃ£ otp/i })).toBeVisible({ timeout: 10_000 });
-    await page.getByPlaceholder("â€¢ â€¢ â€¢ â€¢ â€¢ â€¢").fill("000000");
-    await page.getByRole("button", { name: /xÃ¡c nháº­n$/i }).click();
-
-    // toast hoáº·c message lá»—i xuáº¥t hiá»‡n
-    await expect(page.locator("text=/invalid|sai|verification|fail/i").first())
-      .toBeVisible({ timeout: 10_000 });
-  });
-
-  test("SI-09 Â· Äá»•i sá»‘ Ä‘iá»‡n thoáº¡i tá»« step OTP quay vá» step phone", async ({ page }) => {
-    await page.goto("/signin");
-    await page.getByPlaceholder(/0947010978/i).fill(TEST_USERS.customer.phoneRaw);
-    await page.getByRole("button", { name: /OTP/i }).click();
-    await expect(page.getByRole("heading", { name: /nháº­p mÃ£ otp/i })).toBeVisible({ timeout: 10_000 });
-
-    await page.getByRole("button", { name: /Ä‘á»•i sá»‘ Ä‘iá»‡n thoáº¡i/i }).click();
-    await expect(page.getByRole("heading", { name: /^Ä‘Äƒng nháº­p$/i })).toBeVisible();
+    await page.getByRole("button", { name: /quên mật khẩu/i }).click();
+    await expect(page.getByRole("heading", { name: /quên mật khẩu/i })).toBeVisible();
+    await expect(page.getByText(/tick ô xác nhận bảo mật/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /tick xác nhận bảo mật trước|gửi mã đặt lại mật khẩu/i })).toBeVisible();
   });
 });
-
-
-
