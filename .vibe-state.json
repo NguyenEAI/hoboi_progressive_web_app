@@ -166,7 +166,7 @@
       "note": "Đã kiểm thử các luồng chính và sửa blocker: thu tiền, bán khóa học, chặn quyền admin cho HLV/khách, lễ tân tạo khách nhanh và bán được."
     }
   ],
-  "checkPhaseCallCount": 86,
+  "checkPhaseCallCount": 87,
   "checkPhaseHistory": [
     "2026-07-09T09:52:43.917Z",
     "2026-07-09T09:57:26.015Z",
@@ -253,6 +253,7 @@
     "2026-07-31T03:25:46.644Z",
     "2026-08-04T17:02:54.458Z",
     "2026-08-04T17:20:25.257Z",
-    "2026-08-04T17:22:53.707Z"
+    "2026-08-04T17:22:53.707Z",
+    "2026-08-04T17:38:54.575Z"
   ]
 }
