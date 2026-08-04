@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { CheckinQueue } from "@/components/CheckinQueue";
 import { CrossTable, buildMatrix } from "@/components/CrossTable";
+import { ActivityLog } from "@/components/ActivityLog";
 import { POOL_INFO } from "@/lib/constants";
 import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
@@ -326,6 +327,8 @@ export default function AdminDashboardPage() {
           )}
         </ExecutiveCard>
       </section>
+
+      <ActivityLog />
 
       {isOwner && (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">

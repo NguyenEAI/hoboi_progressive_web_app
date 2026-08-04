@@ -49,6 +49,19 @@ export const extendService = call<
   { ok: boolean; kind: string; endDate?: string; totalSessions?: number; remainingSessions?: number }
 >("extendService");
 
+export const prepareCustomerRegistration = call<
+  { phone: string },
+  { ok: boolean; email: string }
+>("prepareCustomerRegistration");
+export const completeCustomerRegistration = call<
+  { phone: string; fullName?: string },
+  { ok: boolean }
+>("completeCustomerRegistration");
+export const resetCustomerPasswordAfterOtp = call<
+  { phone: string; password: string },
+  { ok: boolean; uid: string }
+>("resetCustomerPasswordAfterOtp");
+
 export const issueQrToken = call<
   { requestedCount?: number; adultsInGroup?: number; purpose?: "VISIT" | "COURSE"; qrPurpose?: "VISIT" | "COURSE" },
   { token: string; expiresAt: number; requestedCount?: number; purpose?: "VISIT" | "COURSE" }
@@ -121,6 +134,7 @@ export const updateCustomerName = call<
   { ok: boolean }
 >("updateCustomerName");
 export const deleteCustomer = call<{ uid: string }, { ok: boolean }>("deleteCustomer");
+export const resetCustomerPasswordToDefault = call<{ uid: string }, { ok: boolean }>("resetCustomerPasswordToDefault");
 export const ownerUpdateCustomerProfile = call<
   {
     uid: string;

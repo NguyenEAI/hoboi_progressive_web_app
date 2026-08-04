@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
-  EmailAuthProvider,
-  linkWithCredential,
+  deleteUser,
   RecaptchaVerifier,
   signInAnonymously,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
-  updatePassword,
+  signOut,
   type ConfirmationResult,
   type User,
 } from "firebase/auth";
@@ -22,7 +21,12 @@ import { POOL_INFO } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 import { normalizeVNPhone, isValidVNPhone10 } from "@/lib/phone";
 import { InstallAppCard } from "@/components/InstallAppCard";
-import { ArrowLeft, KeyRound, LockKeyhole, Phone, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  completeCustomerRegistration,
+  prepareCustomerRegistration,
+  resetCustomerPasswordAfterOtp,
+} from "@/lib/callable";
 
 type Mode = "login" | "signup" | "forgot" | "reset";
 
@@ -39,6 +43,9 @@ function passwordErrorMessage(error: unknown) {
   if (lower.includes("email-already-in-use")) {
     return "Số điện thoại này đã có tài khoản. Vui lòng đăng nhập hoặc chọn Quên mật khẩu.";
   }
+  if (lower.includes("already-exists")) {
+    return raw.replace(/^FirebaseError:\s*/i, "") || "Số điện thoại này đã có tài khoản. Vui lòng đăng nhập hoặc chọn Quên mật khẩu.";
+  }
   if (lower.includes("weak-password")) return "Mật khẩu cần có ít nhất 6 ký tự.";
   if (lower.includes("too-many-requests")) return "Bạn thử quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
   if (lower.includes("network")) return "Mạng đang chập chờn. Vui lòng kiểm tra mạng rồi thử lại.";
@@ -54,7 +61,7 @@ export default function SignInPage() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [code, setCode] = useState("");
   const [confirm, setConfirm] = useState<ConfirmationResult | null>(null);
-  const [verifiedPhoneUser, setVerifiedPhoneUser] = useState<User | null>(null);
+  const [otpVerified, setOtpVerified] = useState(false);
   const [busy, setBusy] = useState(false);
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [help, setHelp] = useState("");
@@ -115,7 +122,7 @@ export default function SignInPage() {
     setHelp("");
     setCode("");
     setConfirm(null);
-    setVerifiedPhoneUser(null);
+    setOtpVerified(false);
     setPassword("");
     setPasswordConfirm("");
   }
@@ -181,20 +188,19 @@ export default function SignInPage() {
     }
     setBusy(true);
     setHelp("");
+    let createdForCleanup: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>["user"] | null = null;
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
-      await setDoc(doc(db, "users", user.uid), {
-        id: user.uid,
-        fullName: "",
-        phone: normalizeVNPhone(currentPhone),
-        role: "CUSTOMER",
-        active: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      await prepareCustomerRegistration({ phone: currentPhone });
+      const created = await createUserWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
+      createdForCleanup = created.user;
+      await completeCustomerRegistration({ phone: currentPhone });
       toast.show("Tạo tài khoản thành công", "success");
       router.replace("/profile");
     } catch (e) {
+      if (createdForCleanup) {
+        await deleteUser(createdForCleanup).catch(() => undefined);
+        await signOut(auth).catch(() => undefined);
+      }
       setHelp(passwordErrorMessage(e));
     } finally {
       setBusy(false);
@@ -232,8 +238,8 @@ export default function SignInPage() {
     }
     setBusy(true);
     try {
-      const result = await confirm.confirm(code);
-      setVerifiedPhoneUser(result.user);
+      await confirm.confirm(code);
+      setOtpVerified(true);
       setMode("reset");
       setCode("");
       setHelp("Đặt mật khẩu mới cho số điện thoại này.");
@@ -246,7 +252,7 @@ export default function SignInPage() {
 
   async function finishPasswordReset() {
     const currentPhone = checkPhone();
-    if (!currentPhone || !verifiedPhoneUser) return;
+    if (!currentPhone || !otpVerified) return;
     if (password.length < 6) {
       setHelp("Mật khẩu cần có ít nhất 6 ký tự.");
       return;
@@ -257,20 +263,14 @@ export default function SignInPage() {
     }
     setBusy(true);
     try {
-      const hasPassword = verifiedPhoneUser.providerData.some((item) => item.providerId === "password");
-      if (hasPassword) {
-        await updatePassword(verifiedPhoneUser, password);
-      } else {
-        await linkWithCredential(verifiedPhoneUser, EmailAuthProvider.credential(phoneLoginEmail(currentPhone), password));
-      }
-      await ensureCustomerProfile(verifiedPhoneUser, currentPhone);
+      await resetCustomerPasswordAfterOtp({ phone: currentPhone, password });
+      await signOut(auth).catch(() => undefined);
+      const { user } = await signInWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
+      await ensureCustomerProfile(user, currentPhone);
       toast.show("Đã đặt mật khẩu mới", "success");
       router.replace("/home");
     } catch (e) {
-      const raw = e instanceof Error ? e.message.toLowerCase() : "";
-      setHelp(raw.includes("credential-already-in-use")
-        ? "Số này đã có mật khẩu ở một tài khoản khác. Vui lòng báo lễ tân để ghép tài khoản."
-        : passwordErrorMessage(e));
+      setHelp(passwordErrorMessage(e));
     } finally {
       setBusy(false);
     }

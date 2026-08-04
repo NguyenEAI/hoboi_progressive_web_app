@@ -1,12 +1,13 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import { normalizeVNPhone, phoneVariants, requireOwner, requireStaff } from "./helpers";
+import { DEFAULT_CUSTOMER_PASSWORD, normalizeVNPhone, phoneLoginEmail, phoneVariants, requireOwner, requireStaff } from "./helpers";
 
 const REGION = "asia-southeast1";
 const db = () => admin.firestore();
 
 const ROLES = ["OWNER", "RECEPTIONIST", "COACH", "CUSTOMER", "PARENT"] as const;
 type Role = (typeof ROLES)[number];
+const STAFF_ROLES = ["OWNER", "RECEPTIONIST", "COACH"];
 
 /**
  * Gán vai trò cho user (Owner-only).
@@ -168,51 +169,95 @@ export const createCustomerByPhone = onCall({ region: REGION }, async (req) => {
   if (!e164)
     throw new HttpsError("invalid-argument", "SĐT không hợp lệ. Nhập 10 số bắt đầu bằng 0.");
 
-  let authUser: admin.auth.UserRecord;
-  try {
-    authUser = await admin.auth().getUserByPhoneNumber(e164);
-  } catch (e: unknown) {
-    const code = (e as { code?: string })?.code;
-    if (code !== "auth/user-not-found")
-      throw new HttpsError("internal", `Lỗi tra Auth: ${(e as Error).message}`);
+  if (fullName.length > 60) throw new HttpsError("invalid-argument", "Tên tối đa 60 ký tự.");
+
+  const email = phoneLoginEmail(e164);
+  let authUser = await getAuthUserForCustomer(e164, email);
+  if (!authUser) {
     try {
-      authUser = await admin.auth().createUser({ phoneNumber: e164, displayName: fullName || undefined });
+      authUser = await admin.auth().createUser({
+        phoneNumber: e164,
+        email,
+        emailVerified: true,
+        password: DEFAULT_CUSTOMER_PASSWORD,
+        displayName: fullName || undefined,
+      });
     } catch (e2) {
       throw new HttpsError("internal", `Tạo Auth user thất bại: ${(e2 as Error).message}`);
     }
+  } else {
+    await ensureCustomerPasswordCredential(authUser.uid, e164, email, fullName || authUser.displayName || undefined);
   }
 
   const ref = db().doc(`users/${authUser.uid}`);
-  const snap = await ref.get();
-  if (snap.exists) {
-    const cur = snap.data()!;
-    if (cur.role && ["OWNER", "RECEPTIONIST", "COACH"].includes(cur.role as string))
-      throw new HttpsError("already-exists", `SĐT này đã thuộc vai trò ${cur.role}, không thể tạo khách hàng.`);
-    // Đã có doc CUSTOMER/PARENT → chỉ cập nhật tên nếu nhân viên cung cấp
-    if (fullName) await ref.set({ fullName }, { merge: true });
-  } else {
-    await ref.set({
-      id: authUser.uid,
-      phone: e164,
-      fullName: fullName || authUser.displayName || "",
-      role: "CUSTOMER",
-      fcmTokens: [],
-      disabled: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      _createdByOwner: true,
+  const lockRef = db().doc(`phoneUnique/${e164.replace(/\D/g, "")}`);
+  const now = admin.firestore.Timestamp.now();
+  const result = await db().runTransaction(async (tx) => {
+    const [snap, lock] = await Promise.all([tx.get(ref), tx.get(lockRef)]);
+    if (lock.exists && lock.data()?.uid !== authUser.uid)
+      throw new HttpsError("already-exists", "SĐT này vừa được tạo ở tài khoản khác. Vui lòng tải lại danh sách.");
+    if (snap.exists) {
+      const cur = snap.data()!;
+      if (cur.role && STAFF_ROLES.includes(cur.role as string))
+        throw new HttpsError("already-exists", `SĐT này đã thuộc vai trò ${cur.role}, không thể tạo khách hàng.`);
+      if (fullName) tx.set(ref, { fullName, updatedAt: now }, { merge: true });
+    } else {
+      tx.set(ref, {
+        id: authUser.uid,
+        phone: e164,
+        fullName: fullName || authUser.displayName || "",
+        role: "CUSTOMER",
+        fcmTokens: [],
+        disabled: false,
+        createdAt: now,
+        _createdByOwner: true,
+      });
+    }
+    tx.set(lockRef, { uid: authUser.uid, phone: e164, updatedAt: now }, { merge: true });
+    tx.set(db().collection("auditLogs").doc(), {
+      actorId: actorUid,
+      action: "CREATE_CUSTOMER",
+      targetType: "user",
+      targetId: authUser.uid,
+      description: snap.exists
+        ? `Nhân viên cập nhật hồ sơ khách ${e164}`
+        : `Nhân viên tạo khách hàng ${fullName || e164} với mật khẩu mặc định`,
+      detail: { phone: e164, fullName, alreadyExists: snap.exists, initialPassword: "DEFAULT_123456" },
+      at: now,
     });
-  }
-
-  await db().collection("auditLogs").add({
-    actorId: actorUid,
-    action: "CREATE_CUSTOMER",
-    targetType: "user",
-    targetId: authUser.uid,
-    detail: { phone: e164, fullName, alreadyExists: snap.exists },
-    at: admin.firestore.Timestamp.now(),
+    return { alreadyExists: snap.exists };
   });
 
-  return { ok: true, uid: authUser.uid, alreadyExists: snap.exists };
+  return { ok: true, uid: authUser.uid, alreadyExists: result.alreadyExists };
+});
+
+export const resetCustomerPasswordToDefault = onCall({ region: REGION }, async (req) => {
+  const ownerUid = requireOwner(req);
+  const uid = String(req.data?.uid ?? "").trim();
+  if (!uid) throw new HttpsError("invalid-argument", "Thiếu uid khách hàng");
+  if (uid === ownerUid) throw new HttpsError("failed-precondition", "Không đặt lại mật khẩu của chính mình tại đây.");
+
+  const ref = db().doc(`users/${uid}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Không tìm thấy khách hàng");
+  const data = snap.data()!;
+  const role = data.role as string | undefined;
+  if (role && STAFF_ROLES.includes(role))
+    throw new HttpsError("failed-precondition", "Không được đặt lại mật khẩu tài khoản nhân sự ở màn khách hàng.");
+  const e164 = normalizeVNPhone(String(data.phone ?? ""));
+  if (!e164) throw new HttpsError("failed-precondition", "Hồ sơ khách chưa có SĐT hợp lệ.");
+
+  await ensureCustomerPasswordCredential(uid, e164, phoneLoginEmail(e164), String(data.fullName ?? "") || undefined);
+  await db().collection("auditLogs").add({
+    actorId: ownerUid,
+    action: "RESET_CUSTOMER_PASSWORD",
+    targetType: "user",
+    targetId: uid,
+    description: `Owner đặt lại mật khẩu khách ${data.fullName || e164} về mặc định`,
+    detail: { phone: e164, passwordPolicy: "DEFAULT_123456" },
+    at: admin.firestore.Timestamp.now(),
+  });
+  return { ok: true };
 });
 
 export const updateCustomerName = onCall({ region: REGION }, async (req) => {
@@ -234,6 +279,7 @@ export const updateCustomerName = onCall({ region: REGION }, async (req) => {
     action: "UPDATE_CUSTOMER_NAME",
     targetType: "user",
     targetId: uid,
+    description: `Nhân viên đổi tên khách từ "${oldName || "chưa đặt"}" sang "${fullName}"`,
     detail: { from: oldName, to: fullName },
     at: admin.firestore.Timestamp.now(),
   });
@@ -270,11 +316,50 @@ export const deleteCustomer = onCall({ region: REGION }, async (req) => {
     action: "DELETE_CUSTOMER",
     targetType: "user",
     targetId: uid,
+    description: `Owner xóa khách hàng ${data.fullName || data.phone || uid}`,
     detail: { phone: data.phone ?? null, fullName: data.fullName ?? null },
     at: admin.firestore.Timestamp.now(),
   });
   return { ok: true };
 });
+
+async function getAuthUserForCustomer(e164: string, email: string): Promise<admin.auth.UserRecord | null> {
+  const [byEmail, byPhone] = await Promise.all([
+    admin.auth().getUserByEmail(email).catch((e: unknown) => {
+      if ((e as { code?: string })?.code === "auth/user-not-found") return null;
+      throw new HttpsError("internal", `Lỗi tra Auth email: ${(e as Error).message}`);
+    }),
+    admin.auth().getUserByPhoneNumber(e164).catch((e: unknown) => {
+      if ((e as { code?: string })?.code === "auth/user-not-found") return null;
+      throw new HttpsError("internal", `Lỗi tra Auth SĐT: ${(e as Error).message}`);
+    }),
+  ]);
+  if (byEmail && byPhone && byEmail.uid !== byPhone.uid) {
+    throw new HttpsError("already-exists", "SĐT này đang nằm ở hai tài khoản Auth khác nhau. Vui lòng xử lý trùng tài khoản trước khi tạo khách.");
+  }
+  return byEmail ?? byPhone;
+}
+
+async function ensureCustomerPasswordCredential(uid: string, e164: string, email: string, displayName?: string) {
+  const update: admin.auth.UpdateRequest = {
+    email,
+    emailVerified: true,
+    password: DEFAULT_CUSTOMER_PASSWORD,
+    disabled: false,
+  };
+  const current = await admin.auth().getUser(uid);
+  if (!current.phoneNumber) update.phoneNumber = e164;
+  if (displayName) update.displayName = displayName;
+  try {
+    await admin.auth().updateUser(uid, update);
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    if (code === "auth/email-already-exists" || code === "auth/phone-number-already-exists") {
+      throw new HttpsError("already-exists", "SĐT này đã thuộc tài khoản khác trong Firebase Auth.");
+    }
+    throw new HttpsError("internal", `Cập nhật tài khoản đăng nhập thất bại: ${(e as Error).message}`);
+  }
+}
 
 // v2.4.1 — Đồng bộ tất cả Firebase Auth users → Firestore docs (Owner-only).
 // Quét toàn bộ user trong Auth, tạo doc placeholder cho ai chưa có /users/{uid}.

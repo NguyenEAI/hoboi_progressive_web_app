@@ -130,6 +130,7 @@ export const checkinByQr = onCall({ region: REGION }, async (req) => {
           adultsInGroup: Number(t.adultsInGroup ?? d.adultsInGroup ?? 0),
         }),
       },
+      req.auth!.uid,
       tokenId,
       tokenRef,
     );
@@ -157,7 +158,7 @@ export const staffCheckinByPhone = onCall({ region: REGION }, async (req) => {
   // v2.4 (E1) — dùng helper chung; throw rõ ràng nếu Auth có nhưng Firestore không.
   const parentId = await findUserUidByPhone(String(d.phone ?? ""));
   const result = await db().runTransaction(async (tx) =>
-    resolveCheckin(tx, parentId, d, "staff-manual", null));
+    resolveCheckin(tx, parentId, d, req.auth!.uid, "staff-manual", null));
   await afterCheckin(result);
   return result;
 });
@@ -173,6 +174,7 @@ async function resolveCheckin(
   tx: FirebaseFirestore.Transaction,
   userId: string,
   d: any,
+  actorId: string,
   qrTokenId: string,
   tokenRef: FirebaseFirestore.DocumentReference | null
 ): Promise<CheckinResult> {
@@ -224,7 +226,7 @@ async function resolveCheckin(
         checkinId: cid,
       }),
     });
-    writeCheckin(tx, userId, d.beneficiaryId, "PACKAGE", pDoc.id, qrTokenId, groupSize, tokenRef, cid);
+    writeCheckin(tx, actorId, userId, d.beneficiaryId, "PACKAGE", pDoc.id, qrTokenId, groupSize, tokenRef, cid);
     return {
       ok: true,
       kind: "PACKAGE",
@@ -278,7 +280,7 @@ async function resolveCheckin(
     });
     if (completed)
       tx.update(slot.ref, { enrolledCount: Math.max(0, (s.enrolledCount ?? 1) - 1) });
-    writeCheckin(tx, userId, d.beneficiaryId, "COURSE", eDoc.id, qrTokenId, 1, tokenRef);
+    writeCheckin(tx, actorId, userId, d.beneficiaryId, "COURSE", eDoc.id, qrTokenId, 1, tokenRef);
     const notifyUid = (e.parentId as string | undefined) ?? (isStaffSource ? userId : undefined);
     const notify = notifyUid
       ? {
@@ -310,7 +312,7 @@ async function resolveCheckin(
       throw new HttpsError("permission-denied", "Vé thuộc người khác trong gia đình");
     if (m.endDate.toDate() < now)
       throw new HttpsError("failed-precondition", "Vé đã hết hạn");
-    writeCheckin(tx, userId, d.beneficiaryId, "MEMBERSHIP", mDoc.id, qrTokenId, 1, tokenRef);
+    writeCheckin(tx, actorId, userId, d.beneficiaryId, "MEMBERSHIP", mDoc.id, qrTokenId, 1, tokenRef);
     return {
       ok: true,
       kind: "MEMBERSHIP",
@@ -372,7 +374,7 @@ async function resolveCheckin(
     if (completed) {
       tx.update(slot.ref, { enrolledCount: Math.max(0, (s.enrolledCount ?? 1) - 1) });
     }
-    writeCheckin(tx, userId, d.beneficiaryId, "COURSE", eDoc.id, qrTokenId, 1, tokenRef);
+    writeCheckin(tx, actorId, userId, d.beneficiaryId, "COURSE", eDoc.id, qrTokenId, 1, tokenRef);
     const notifyUid = (e.parentId as string | undefined) ?? (isStaffSource ? userId : undefined);
     const notify = notifyUid
       ? {
@@ -423,7 +425,7 @@ async function resolveCheckin(
         at: admin.firestore.Timestamp.now(), count: groupSize, checkinId: cid,
       }),
     });
-    writeCheckin(tx, userId, d.beneficiaryId, "PACKAGE", pkg.id, qrTokenId, groupSize, tokenRef, cid);
+    writeCheckin(tx, actorId, userId, d.beneficiaryId, "PACKAGE", pkg.id, qrTokenId, groupSize, tokenRef, cid);
     return {
       ok: true,
       kind: "PACKAGE",
@@ -455,7 +457,7 @@ async function resolveCheckin(
     return md.holderId === subjectId && md.endDate.toDate() >= now;
   });
   if (mem) {
-    writeCheckin(tx, userId, d.beneficiaryId, "MEMBERSHIP", mem.id, qrTokenId, 1, tokenRef);
+    writeCheckin(tx, actorId, userId, d.beneficiaryId, "MEMBERSHIP", mem.id, qrTokenId, 1, tokenRef);
     const md = mem.data();
     return {
       ok: true,
@@ -479,17 +481,30 @@ async function resolveCheckin(
 }
 
 function writeCheckin(
-  tx: FirebaseFirestore.Transaction, userId: string, beneficiaryId: string | undefined,
+  tx: FirebaseFirestore.Transaction, actorId: string, userId: string, beneficiaryId: string | undefined,
   kind: string, refId: string, qrTokenId: string, groupSize: number,
   tokenRef: FirebaseFirestore.DocumentReference | null, fixedId?: string,
 ) {
+  const now = admin.firestore.Timestamp.now();
   const ref = fixedId ? db().collection("checkins").doc(fixedId) : db().collection("checkins").doc();
   tx.set(ref, {
     id: ref.id, userId, beneficiaryId: beneficiaryId ?? null,
     kind, refId, qrTokenId, groupSize, result: "ACCEPTED",
-    at: admin.firestore.Timestamp.now(),
+    at: now,
   });
   if (tokenRef) tx.update(tokenRef, { used: true });
+  const byStaff = tokenRef === null;
+  tx.set(db().collection("auditLogs").doc(), {
+    actorId,
+    action: byStaff ? "STAFF_CHECKIN_ON_BEHALF" : "QR_CHECKIN_ACCEPTED",
+    targetType: "checkin",
+    targetId: ref.id,
+    description: byStaff
+      ? `Lễ tân điểm danh hộ ${serviceKindLabel(kind)} cho khách`
+      : `Khách check-in ${serviceKindLabel(kind)} bằng QR`,
+    detail: { userId, beneficiaryId: beneficiaryId ?? null, kind, refId, groupSize, qrTokenId },
+    at: now,
+  });
 }
 
 async function afterCheckin(r: CheckinResult) {
@@ -508,6 +523,12 @@ async function afterCheckin(r: CheckinResult) {
 const pad = (n: number) => String(n).padStart(2, "0");
 const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const viDate = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+function serviceKindLabel(kind: string) {
+  if (kind === "COURSE") return "khóa học";
+  if (kind === "PACKAGE") return "vé lượt";
+  if (kind === "MEMBERSHIP") return "vé thời hạn";
+  return "dịch vụ";
+}
 
 // PACKAGE QR now deducts immediately from the QR token requestedCount.
 // Legacy checkinRequests are kept for history only and expire on approve/reject attempts.
@@ -546,6 +567,7 @@ export const requestCheckin = onCall({ region: REGION }, async (req) => {
         groupSize: positiveInt(t.requestedCount, 1),
         adultsInGroup: Number(t.adultsInGroup ?? d.adultsInGroup ?? 0),
       },
+      uid,
       tokenId,
       tokenRef,
     );

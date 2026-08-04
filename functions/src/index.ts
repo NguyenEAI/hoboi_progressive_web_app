@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 admin.initializeApp();
 
+export { prepareCustomerRegistration, completeCustomerRegistration, resetCustomerPasswordAfterOtp } from "./auth";
 export { createOrder, createCounterSale, confirmPayment, cancelOrder, refundOrder, extendService } from "./orders";
 export {
   issueQrToken,
@@ -21,6 +22,7 @@ export {
   createCustomerByPhone,
   updateCustomerName,
   deleteCustomer,
+  resetCustomerPasswordToDefault,
 } from "./staff";
 export { ownerUpdateCustomerProfile, ownerUpdateCustomerService } from "./customerAdmin";
 export { updatePricing, upsertCoach, setCoachActive, deleteOrder, sendPromotion } from "./admin";

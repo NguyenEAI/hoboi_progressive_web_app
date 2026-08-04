@@ -23,6 +23,7 @@ import {
   FileText,
   GraduationCap,
   History,
+  KeyRound,
   Phone,
   ReceiptText,
   RefreshCw,
@@ -33,7 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { db } from "@/lib/firebase/client";
-import { ownerUpdateCustomerProfile, ownerUpdateCustomerService } from "@/lib/callable";
+import { ownerUpdateCustomerProfile, ownerUpdateCustomerService, resetCustomerPasswordToDefault } from "@/lib/callable";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import { useToast } from "@/components/Toast";
 import type {
@@ -177,6 +178,18 @@ export default function Customer360Page() {
     await load();
   }
 
+  async function resetPassword() {
+    if (!data) return;
+    if (!confirm(`Đặt lại mật khẩu của ${data.customer.fullName || displayPhone(data.customer.phone)} về 123456?`)) return;
+    try {
+      await resetCustomerPasswordToDefault({ uid: data.customer.id });
+      toast.show("Đã đặt lại mật khẩu về 123456.", "success");
+      await load();
+    } catch (e) {
+      toast.show("Đặt lại mật khẩu thất bại: " + (e as Error).message, "error");
+    }
+  }
+
   if (authLoading || loading) {
     return <LoadingView />;
   }
@@ -221,6 +234,12 @@ export default function Customer360Page() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
           >
             <Edit3 className="size-4" /> Sửa hồ sơ
+          </button>
+          <button
+            onClick={resetPassword}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+          >
+            <KeyRound className="size-4" /> Reset mật khẩu 123456
           </button>
         </div>
       </header>

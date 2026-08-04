@@ -20,6 +20,7 @@ import {
   Waves,
 } from "lucide-react";
 import { CrossTable, buildMatrix } from "@/components/CrossTable";
+import { ActivityLog } from "@/components/ActivityLog";
 import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import { formatVND, toDate } from "@/lib/utils";
@@ -44,6 +45,8 @@ const PRODUCT_ICONS: Record<ProductType, React.ReactNode> = {
 
 export default function ReportsPage() {
   const { profile } = useAuthUser();
+  const isOwner = profile?.role === "OWNER";
+  const isStaff = profile?.role === "OWNER" || profile?.role === "RECEPTIONIST";
   const today = new Date();
   const [mode, setMode] = useState<Mode>("MONTH");
   const [day, setDay] = useState(today.toISOString().slice(0, 10));
@@ -60,7 +63,7 @@ export default function ReportsPage() {
   const previousRange = useMemo(() => previousRangeFor(mode, range), [mode, range]);
 
   useEffect(() => {
-    if (profile?.role !== "OWNER") return;
+    if (!isStaff) return;
     const q = query(
       collection(db, "orders"),
       where("status", "==", "PAID"),
@@ -72,10 +75,10 @@ export default function ReportsPage() {
       (s) => setOrders(s.docs.map((d) => ({ id: d.id, ...d.data() }) as Order)),
       (e) => console.error("reports query error:", e),
     );
-  }, [profile?.role, range.start, range.end]);
+  }, [isStaff, range.start, range.end]);
 
   useEffect(() => {
-    if (profile?.role !== "OWNER") return;
+    if (!isStaff) return;
     const q = query(
       collection(db, "orders"),
       where("status", "==", "PAID"),
@@ -87,10 +90,10 @@ export default function ReportsPage() {
       (s) => setPreviousOrders(s.docs.map((d) => ({ id: d.id, ...d.data() }) as Order)),
       (e) => console.error("reports previous query error:", e),
     );
-  }, [profile?.role, previousRange.start, previousRange.end]);
+  }, [isStaff, previousRange.start, previousRange.end]);
 
   useEffect(() => {
-    if (profile?.role !== "OWNER") return;
+    if (!isStaff) return;
     const q = query(
       collection(db, "checkins"),
       where("at", ">=", Timestamp.fromDate(range.start)),
@@ -101,7 +104,7 @@ export default function ReportsPage() {
       (s) => setCheckins(s.docs.map((d) => ({ id: d.id, ...d.data() }) as CheckIn)),
       (e) => console.error("reports checkins query error:", e),
     );
-  }, [profile?.role, range.start, range.end]);
+  }, [isStaff, range.start, range.end]);
 
   const periodLabel = labelFor(mode, range, day, month, year, from, to);
   const previousLabel = `${previousRange.start.toLocaleDateString("vi-VN")} - ${previousRange.end.toLocaleDateString("vi-VN")}`;
@@ -137,7 +140,7 @@ export default function ReportsPage() {
 
   // Phải đặt sau toàn bộ hook ở trên: khi hồ sơ tải xong và là lễ tân,
   // React vẫn nhận đúng số hook như lúc trạng thái đang tải.
-  if (profile && profile.role !== "OWNER") return <OwnerOnlyState />;
+  if (profile && !isStaff) return <OwnerOnlyState />;
 
   function exportCsv() {
     const rows = [
@@ -174,14 +177,16 @@ export default function ReportsPage() {
             {periodLabel} · so sánh với kỳ trước: {previousLabel}
           </p>
         </div>
-        <button
-          onClick={exportCsv}
-          disabled={!filteredOrders.length}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50 disabled:opacity-50"
-        >
-          <Download className="size-4" />
-          Xuất CSV
-        </button>
+        {isOwner && (
+          <button
+            onClick={exportCsv}
+            disabled={!filteredOrders.length}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50 disabled:opacity-50"
+          >
+            <Download className="size-4" />
+            Xuất CSV
+          </button>
+        )}
       </header>
 
       <PeriodSelector
@@ -203,8 +208,8 @@ export default function ReportsPage() {
         <ReportMetric
           icon={<Coins className="size-5" />}
           label="Doanh thu"
-          value={formatVND(totalRevenue)}
-          delta={delta(totalRevenue, previousRevenue)}
+          value={isOwner ? formatVND(totalRevenue) : "Chỉ Owner"}
+          delta={isOwner ? delta(totalRevenue, previousRevenue) : undefined}
           primary
         />
         <ReportMetric
@@ -222,8 +227,8 @@ export default function ReportsPage() {
         <ReportMetric
           icon={<TrendingUp className="size-5" />}
           label="Trung bình/đơn"
-          value={aov > 0 ? formatVND(aov) : "—"}
-          delta={delta(aov, previousAov)}
+          value={isOwner && aov > 0 ? formatVND(aov) : "—"}
+          delta={isOwner ? delta(aov, previousAov) : undefined}
         />
         <ReportMetric
           icon={<Waves className="size-5" />}
@@ -239,7 +244,13 @@ export default function ReportsPage() {
           subtitle="Mỗi cột là doanh thu PAID trong kỳ đang chọn."
         >
           {orders.length > 0 ? (
-            <RevenueChart data={chart} />
+            isOwner ? <RevenueChart data={chart} /> : (
+              <EmptyPanel
+                icon={<Lock className="size-5" />}
+                title="Doanh thu chỉ dành cho Owner"
+                description="Lễ tân vẫn dùng bộ lọc kỳ để xem lưu lượng, số đơn và hoạt động vận hành."
+              />
+            )
           ) : (
             <EmptyPanel
               icon={<BarChart3 className="size-5" />}
@@ -252,22 +263,28 @@ export default function ReportsPage() {
         <Panel title="Cơ cấu dịch vụ" subtitle="Tỷ trọng theo doanh thu và số đơn.">
           <div className="space-y-3">
             {serviceStats.map((s) => (
-              <ServiceCard key={s.type} stat={s} total={totalRevenue} />
+              <ServiceCard key={s.type} stat={s} total={totalRevenue} showAmount={isOwner} />
             ))}
           </div>
         </Panel>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Panel title="Loại dịch vụ × Đối tượng" subtitle="Khóa học dùng giá phẳng nên không chia đối tượng.">
-          <CrossTable matrix={matrix} />
+        <Panel title="Loại dịch vụ × Đối tượng" subtitle={isOwner ? "Khóa học dùng giá phẳng nên không chia đối tượng." : "Lễ tân xem số lượng vận hành; doanh thu chỉ Owner xem."}>
+          {isOwner ? <CrossTable matrix={matrix} /> : (
+            <EmptyPanel
+              icon={<Lock className="size-5" />}
+              title="Bảng doanh thu đã ẩn"
+              description="Bộ lọc vẫn áp dụng cho giao dịch, lưu lượng và activity log bên dưới."
+            />
+          )}
         </Panel>
 
         <Panel title="Top khách hàng" subtitle="Xếp theo doanh thu trong kỳ.">
           {topCustomers.length > 0 ? (
             <ol className="space-y-2">
               {topCustomers.map((customer, index) => (
-                <TopCustomerRow key={customer.id} customer={customer} index={index} />
+                <TopCustomerRow key={customer.id} customer={customer} index={index} showAmount={isOwner} />
               ))}
             </ol>
           ) : (
@@ -296,7 +313,7 @@ export default function ReportsPage() {
         }
       >
         {filteredOrders.length > 0 ? (
-          <TransactionTable orders={filteredOrders.slice(0, 50)} />
+          <TransactionTable orders={filteredOrders.slice(0, 50)} showAmount={isOwner} />
         ) : (
           <EmptyPanel
             icon={<FileText className="size-5" />}
@@ -305,6 +322,8 @@ export default function ReportsPage() {
           />
         )}
       </Panel>
+
+      <ActivityLog title="Activity log vận hành" max={20} />
     </div>
   );
 }
@@ -473,9 +492,11 @@ function RevenueChart({ data }: { data: ChartPoint[] }) {
 function ServiceCard({
   stat,
   total,
+  showAmount,
 }: {
   stat: { type: ProductType; revenue: number; count: number };
   total: number;
+  showAmount: boolean;
 }) {
   const pct = total > 0 ? Math.round((stat.revenue / total) * 100) : 0;
   return (
@@ -490,7 +511,7 @@ function ServiceCard({
             <div className="text-xs text-slate-500">{stat.count} đơn · {pct}%</div>
           </div>
         </div>
-        <div className="text-right text-sm font-black text-slate-900 tab-nums">{formatVND(stat.revenue)}</div>
+        <div className="text-right text-sm font-black text-slate-900 tab-nums">{showAmount ? formatVND(stat.revenue) : `${stat.count} đơn`}</div>
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
         <div className="h-full rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
@@ -502,9 +523,11 @@ function ServiceCard({
 function TopCustomerRow({
   customer,
   index,
+  showAmount,
 }: {
   customer: { id: string; name: string; revenue: number; count: number };
   index: number;
+  showAmount: boolean;
 }) {
   return (
     <li className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
@@ -515,12 +538,12 @@ function TopCustomerRow({
         <div className="truncate text-sm font-bold text-slate-800">{customer.name}</div>
         <div className="text-xs text-slate-500">{customer.count} đơn</div>
       </div>
-      <div className="text-right text-sm font-black text-brand-700 tab-nums">{formatVND(customer.revenue)}</div>
+      <div className="text-right text-sm font-black text-brand-700 tab-nums">{showAmount ? formatVND(customer.revenue) : `${customer.count} đơn`}</div>
     </li>
   );
 }
 
-function TransactionTable({ orders }: { orders: Order[] }) {
+function TransactionTable({ orders, showAmount }: { orders: Order[]; showAmount: boolean }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-left text-sm">
@@ -530,7 +553,7 @@ function TransactionTable({ orders }: { orders: Order[] }) {
             <th className="p-3">Khách / người hưởng</th>
             <th className="p-3">Dịch vụ</th>
             <th className="p-3">Mã đơn</th>
-            <th className="rounded-r-xl p-3 text-right">Số tiền</th>
+            {showAmount && <th className="rounded-r-xl p-3 text-right">Số tiền</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -546,7 +569,7 @@ function TransactionTable({ orders }: { orders: Order[] }) {
                 <div className="text-xs text-slate-500">{order.productSnapshot?.name ?? "—"}</div>
               </td>
               <td className="p-3 text-xs text-slate-500">{order.id}</td>
-              <td className="p-3 text-right font-black text-brand-700 tab-nums">{formatVND(order.amountVND ?? 0)}</td>
+              {showAmount && <td className="p-3 text-right font-black text-brand-700 tab-nums">{formatVND(order.amountVND ?? 0)}</td>}
             </tr>
           ))}
         </tbody>

@@ -336,6 +336,7 @@ export interface AuditLog {
   action: string;
   targetType: string;
   targetId: string;
+  description?: string;
   detail?: Record<string, unknown>;
   at: TS;
 }

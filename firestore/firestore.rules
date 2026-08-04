@@ -93,7 +93,8 @@ service cloud.firestore {
     }
     match /qrTokens/{id}      { allow read: if false; allow write: if false; }
     match /counters/{id}      { allow read: if false; allow write: if false; }
-    match /auditLogs/{id}     { allow read: if isOwner(); allow write: if false; }
+    match /auditLogs/{id}     { allow read: if isStaff(); allow write: if false; }
+    match /phoneUnique/{id}   { allow read, write: if false; }
     // Báo cáo tài chính: chỉ Owner (INV-9 — lễ tân không xem báo cáo tổng)
     match /dailyStats/{d}     { allow read: if isOwner(); allow write: if false; }
     match /monthlyStats/{m}   { allow read: if isOwner(); allow write: if false; }

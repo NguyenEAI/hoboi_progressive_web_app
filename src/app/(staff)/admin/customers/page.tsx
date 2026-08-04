@@ -9,9 +9,10 @@ import {
   createCustomerByPhone,
   updateCustomerName,
   deleteCustomer,
+  resetCustomerPasswordToDefault,
 } from "@/lib/callable";
 import { useToast } from "@/components/Toast";
-import { RefreshCw, Pencil, Trash2, UserPlus, X, Eye } from "lucide-react";
+import { RefreshCw, Pencil, Trash2, UserPlus, X, Eye, KeyRound } from "lucide-react";
 import type { User } from "@/types";
 import { formatDate, toDate } from "@/lib/utils";
 
@@ -103,6 +104,16 @@ export default function CustomersPage() {
       setDeletingUid(null);
     } catch (e) {
       toast.show("Xóa thất bại: " + (e as Error).message, "error");
+    }
+  }
+
+  async function handleResetPassword(user: User) {
+    if (!confirm(`Đặt lại mật khẩu của ${user.fullName || displayPhone(user.phone)} về 123456?`)) return;
+    try {
+      await resetCustomerPasswordToDefault({ uid: user.id });
+      toast.show("Đã đặt lại mật khẩu về 123456.", "success");
+    } catch (e) {
+      toast.show("Đặt lại mật khẩu thất bại: " + (e as Error).message, "error");
     }
   }
 
@@ -216,6 +227,15 @@ export default function CustomersPage() {
                         >
                           <Eye className="size-4" />
                         </Link>
+                      )}
+                      {isOwner && (
+                        <button
+                          onClick={() => handleResetPassword(u)}
+                          title="Đặt lại mật khẩu về 123456"
+                          className="rounded-lg p-1.5 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
+                        >
+                          <KeyRound className="size-4" />
+                        </button>
                       )}
                       {isOwner && (
                         <button
@@ -365,6 +385,9 @@ function CreateCustomerModal({
         placeholder="0947010978"
       />
       <p className="mt-1 text-[11px] text-slate-500">10 số bắt đầu bằng 0.</p>
+      <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+        Mật khẩu ban đầu của khách sẽ là 123456. Hãy yêu cầu khách đổi lại sau khi đăng nhập.
+      </p>
       <label className="mt-3 block text-sm font-medium">Họ và tên (tùy chọn)</label>
       <input
         value={name}

@@ -75,3 +75,9 @@ export function phoneVariants(input: string): { e164: string; local: string; raw
   if (!e164) return null;
   return { e164, local: "0" + e164.slice(3), raw };
 }
+
+export const DEFAULT_CUSTOMER_PASSWORD = "123456";
+
+export function phoneLoginEmail(e164Phone: string): string {
+  return `phone-${e164Phone.replace(/\D/g, "")}@login.hoboiapp.com`;
+}

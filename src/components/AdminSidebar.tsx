@@ -24,7 +24,7 @@ const GROUPS: { title: string; items: { href: string; label: string; ownerOnly?:
     { href: "/admin/promotions", label: "📣 Khuyến mãi", ownerOnly: true },
   ]},
   { title: "Phân tích", items: [
-    { href: "/admin/reports", label: "📊 Báo cáo", ownerOnly: true },
+    { href: "/admin/reports", label: "📊 Báo cáo" },
   ]},
 ];
 

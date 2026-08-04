@@ -29,6 +29,11 @@ const REGION = "asia-southeast1";
 const db = () => admin.firestore();
 const FV = admin.firestore.FieldValue;
 const PASS_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
+const PRODUCT_LABELS: Record<string, string> = {
+  PASS: "vé thời hạn",
+  PACKAGE: "gói lượt",
+  SWIM_COURSE: "khóa học bơi",
+};
 
 function requireAuth(req: any): string {
   if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
@@ -182,6 +187,15 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
           coachId: d.coachId, slotId,
           startDate: admin.firestore.Timestamp.fromDate(startDate),
         });
+        tx.set(db().collection("auditLogs").doc(), {
+          actorId: uid,
+          action: "ORDER_CREATED",
+          targetType: "order",
+          targetId: orderRef.id,
+          description: `Khách ${beneficiaryName || uid} đăng ký ${PRODUCT_LABELS[productType]}`,
+          detail: { productType, amountVND, customerId: uid, beneficiaryId: finalBeneficiaryId },
+          at: admin.firestore.Timestamp.now(),
+        });
         return { orderId: orderRef.id, amountVND };
       });
     }
@@ -202,12 +216,33 @@ export const createOrder = onCall({ region: REGION }, async (req) => {
         coachId: d.coachId, slotId: d.slotId,
         startDate: admin.firestore.Timestamp.fromDate(new Date(d.startDate)),
       });
+      tx.set(db().collection("auditLogs").doc(), {
+        actorId: uid,
+        action: "ORDER_CREATED",
+        targetType: "order",
+        targetId: orderRef.id,
+        description: `Khách ${beneficiaryName || uid} đăng ký ${PRODUCT_LABELS[productType]}`,
+        detail: { productType, amountVND, customerId: uid, beneficiaryId: finalBeneficiaryId },
+        at: admin.firestore.Timestamp.now(),
+      });
       return { orderId: orderRef.id, amountVND };
     });
   }
 
   const orderRef = db().collection("orders").doc();
-  await orderRef.set({ ...baseOrder, id: orderRef.id });
+  const now = admin.firestore.Timestamp.now();
+  const batch = db().batch();
+  batch.set(orderRef, { ...baseOrder, id: orderRef.id });
+  batch.set(db().collection("auditLogs").doc(), {
+    actorId: uid,
+    action: "ORDER_CREATED",
+    targetType: "order",
+    targetId: orderRef.id,
+    description: `Khách ${beneficiaryName || uid} đăng ký ${PRODUCT_LABELS[productType]}`,
+    detail: { productType, amountVND, customerId: uid, beneficiaryId: finalBeneficiaryId },
+    at: now,
+  });
+  await batch.commit();
   return { orderId: orderRef.id, amountVND };
 });
 
@@ -285,6 +320,15 @@ export const confirmPayment = onCall({ region: REGION }, async (req) => {
       receivedByStaffId: req.auth!.uid, at: now,
     });
     tx.update(orderRef, { status: "PAID", paidAt: now, confirmedByStaffId: req.auth!.uid });
+    tx.set(db().collection("auditLogs").doc(), {
+      actorId: req.auth!.uid,
+      action: "SERVICE_ACTIVATED",
+      targetType: "order",
+      targetId: orderId,
+      description: `Nhân viên kích hoạt ${PRODUCT_LABELS[o.productType] ?? "dịch vụ"} cho ${o.beneficiaryName || o.customerId}`,
+      detail: { productType: o.productType, amountVND: o.amountVND, customerId: o.customerId, productName: ps.name },
+      at: now,
+    });
     return { ok: true, memberCode: code, customerId: o.customerId, productName: ps.name as string };
   });
 
@@ -464,6 +508,7 @@ export const createCounterSale = onCall({ region: REGION, cors: true }, async (r
       action: "COUNTER_SALE",
       targetType: "order",
       targetId: orderRef.id,
+      description: `Nhân viên bán tại quầy và kích hoạt ${PRODUCT_LABELS[productType] ?? "dịch vụ"} cho ${beneficiaryName || customerId}`,
       detail: { productType, amountVND, customerId, beneficiaryId },
       at: now,
     });
