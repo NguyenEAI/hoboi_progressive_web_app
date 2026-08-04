@@ -11,6 +11,7 @@ export {
   requestCheckin,
   approveCheckin,
   correctPackageCheckin,
+  correctCourseAttendance,
   rejectCheckin,
   cancelCheckinRequest,
 } from "./checkin";

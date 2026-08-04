@@ -3,6 +3,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { collection, limit, onSnapshot, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import {
+  defaultNormalize,
+  formatPhone,
+  normalizeLocalPhone,
+  selectedSuggestionPhone,
+  toLocalPhone,
+} from "@/lib/staffPhoneAutocomplete";
 
 export type StaffPhoneSuggestion = {
   uid: string;
@@ -129,9 +136,10 @@ export function StaffPhoneAutocomplete({
               <button
                 type="button"
                 onClick={() => {
-                  onChange(entry.local);
+                  const selectedPhone = selectedSuggestionPhone(entry, normalize, maxLength);
+                  onChange(selectedPhone);
                   setOpen(false);
-                  onSelect?.(entry);
+                  onSelect?.({ ...entry, local: selectedPhone });
                 }}
                 className="flex min-h-12 w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-brand-50 focus:bg-brand-50 focus:outline-none"
               >
@@ -154,19 +162,4 @@ export function StaffPhoneAutocomplete({
   );
 }
 
-export function defaultNormalize(value: string) {
-  return value.replace(/[^0-9+]/g, "");
-}
-
-export function normalizeLocalPhone(value: string) {
-  return value.replace(/\D/g, "").slice(0, 10);
-}
-
-function toLocalPhone(phone: string) {
-  return phone.startsWith("+84") ? `0${phone.slice(3)}` : phone;
-}
-
-function formatPhone(local: string): string {
-  if (/^0\d{9}$/.test(local)) return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`;
-  return local;
-}
+export { defaultNormalize, normalizeLocalPhone };

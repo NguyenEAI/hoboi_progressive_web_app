@@ -123,8 +123,8 @@ export default function CounterSalePage() {
     }
   }
 
-  async function findCustomer() {
-    const raw = normalizePhoneInput(phone);
+  async function findCustomer(selectedPhone?: string) {
+    const raw = normalizePhoneInput(selectedPhone ?? phone);
     if (!raw) return;
     setPhone(raw);
     setSearching(true);
@@ -334,7 +334,7 @@ export default function CounterSalePage() {
               <StaffPhoneAutocomplete
                 value={phone}
                 onChange={setPhone}
-                onSelect={() => setTimeout(() => void findCustomer(), 0)}
+                onSelect={(entry) => void findCustomer(entry.local)}
                 onEnter={() => void findCustomer()}
                 normalize={normalizePhoneInput}
                 placeholder="0905 123 456"
@@ -342,7 +342,7 @@ export default function CounterSalePage() {
                 className="min-w-0 flex-1 rounded-2xl border-2 border-brand-100 bg-white px-5 py-4 text-2xl font-extrabold tracking-wide text-brand-950 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
               />
               <button
-                onClick={findCustomer}
+                onClick={() => void findCustomer()}
                 disabled={searching}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-7 font-bold text-white shadow-lg shadow-brand-600/20 disabled:opacity-50"
               >

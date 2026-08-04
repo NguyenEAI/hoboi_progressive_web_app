@@ -52,6 +52,20 @@ export type CheckInKind = "PACKAGE" | "MEMBERSHIP" | "COURSE";
 export type CheckInResult = "ACCEPTED" | "REJECTED";
 export type SkillLevel = "NOT_STARTED" | "LEARNING" | "COMPLETED";
 
+export interface CourseAttendanceCorrection {
+  at: TS;
+  by: string;
+  role?: string;
+  reason: string;
+  checkinId: string;
+  attendanceId: string;
+  beforeAttended: number;
+  afterAttended: number;
+  totalSessions: number;
+  restoredEnrollmentStatus: boolean;
+  slotEnrolledAfter?: number | null;
+}
+
 // ---------- USERS ----------
 export interface User {
   id: string;
@@ -240,6 +254,7 @@ export interface Enrollment {
   attendedSessions: number;
   status: EnrollmentStatus;
   coachNotes?: { text: string; at: TS }[]; // ghi chú riêng (chỉ HLV)
+  attendanceCorrectionHistory?: CourseAttendanceCorrection[];
   createdAt: TS;
   completedAt?: TS;
   expiredAt?: TS;
@@ -251,6 +266,10 @@ export interface Attendance {
   source: "QR" | "STAFF"; // tự động QR hay lễ tân điểm danh hộ
   markedByStaffId?: string;
   at: TS;
+  undoneAt?: TS;
+  undoneBy?: string;
+  undoReason?: string;
+  correctionHistory?: CourseAttendanceCorrection[];
 }
 
 // v2.4 (E4) — HLV báo nghỉ ca. Doc id = `${date}_${startHour}` trong subcollection
@@ -278,7 +297,7 @@ export interface CheckIn {
   result: CheckInResult;
   reason?: string;
   refundedCount?: number;
-  correctionStatus?: "PARTIALLY_REFUNDED" | "CANCELLED_OR_FULLY_REFUNDED";
+  correctionStatus?: "PARTIALLY_REFUNDED" | "CANCELLED_OR_FULLY_REFUNDED" | "ATTENDANCE_UNDONE";
   remainingAfterCorrection?: number;
   corrections?: {
     at: TS;
@@ -290,6 +309,10 @@ export interface CheckIn {
     beforeRemaining: number;
     afterRemaining: number;
   }[];
+  attendanceId?: string;
+  attendancePath?: string;
+  completedEnrollment?: boolean;
+  courseAttendanceUndo?: CourseAttendanceCorrection;
   at: TS;
 }
 

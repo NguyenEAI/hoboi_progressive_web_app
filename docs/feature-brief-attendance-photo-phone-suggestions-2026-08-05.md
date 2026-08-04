@@ -2,6 +2,9 @@
 
 ## Đã triển khai trong mã nguồn
 
+- Autocomplete SĐT truyền trực tiếp số đã chọn đầy đủ vào handler tìm kiếm ở các màn quầy, tránh race React state khiến click gợi ý vẫn tìm bằng prefix đang gõ.
+- Lễ tân/Owner có thêm luồng `correctCourseAttendance` để hủy 1 buổi điểm danh khóa học đã ghi khi học viên rời hồ trước khi học. Callable bắt buộc lý do, chỉ cho hủy một lần cho check-in/attendance, giảm `attendedSessions`, ghi lịch sử trên attendance/enrollment/checkin, audit log và notification.
+- Nếu buổi bị hủy là buổi thứ 15 làm enrollment chuyển `COMPLETED`, hệ thống mở lại enrollment về `ACTIVE` và trả slot trong transaction; nếu slot hiện đã đủ chỗ thì chặn để không vượt cap.
 - Lễ tân/Owner dùng lại luồng `correctPackageCheckin` để hoàn lượt ngay sau check-in vé lượt khi khách không học/không xuống hồ. Callable bắt buộc lý do, chặn hoàn trùng/quá lượt, cập nhật số lượt còn, ghi `correctionHistory`, `corrections`, audit log và notification cho khách.
 - Ảnh vé thời hạn hiển thị cho staff ở hồ sơ khách, điểm danh hộ và từng ngữ cảnh vé thời hạn; staff có thể chụp/chọn ảnh mới, nhập lý do và lưu qua callable `updateMembershipPassPhoto`.
 - Tách `StaffPhoneAutocomplete` dùng chung cho các màn staff có nhập SĐT khách: điểm danh hộ, bán tại quầy, thêm khách, gán vai trò, gửi thử khuyến mãi và sửa SĐT hồ sơ Owner.

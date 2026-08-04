@@ -2,6 +2,10 @@
 
 ## 2026-08-05
 
+- Sửa lỗi autocomplete SĐT ở các màn quầy: khi bấm gợi ý, handler tìm kiếm nhận trực tiếp số đã chọn đầy đủ thay vì chờ React state cập nhật, tránh trường hợp chỉ tìm bằng tiền tố như `093`.
+- Thêm callable `correctCourseAttendance` cho Owner/Lễ tân hủy đúng 1 buổi điểm danh khóa học đã ghi khi học viên rời hồ trước khi học. Luồng bắt buộc lý do, chặn hủy trùng, giảm `attendedSessions`, ghi lịch sử trên attendance/enrollment/checkin, audit log và notification cho khách/phụ huynh.
+- Nếu buổi bị hủy là buổi đã làm khóa học chuyển `COMPLETED`, hệ thống mở lại enrollment về `ACTIVE` và tăng lại slot `enrolledCount` trong transaction; nếu slot đã đầy thì chặn để không vượt sức chứa.
+
 - Lễ tân/Owner có thể hoàn lượt ngay sau một lần check-in vé lượt khi khách không học/không xuống hồ; hệ thống bắt buộc lý do, chặn hoàn trùng/quá số lượt, cập nhật lượt còn, ghi lịch sử sửa sai/audit và gửi thông báo cho khách.
 - Staff xem được ảnh vé thời hạn trong hồ sơ khách, điểm danh hộ và từng thẻ vé thời hạn; lễ tân/Owner có thể thay ảnh bằng ảnh mới đã upload đúng vùng lưu trữ của khách/người dùng vé.
 - Dùng chung autocomplete SĐT cho các màn staff nhập số khách: gợi ý từ ký tự thứ ba theo tên/SĐT, chọn là điền số vào form, giữ khả năng nhập tay để tra Auth khi chưa có hồ sơ Firestore.

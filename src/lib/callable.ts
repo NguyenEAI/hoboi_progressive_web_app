@@ -211,6 +211,11 @@ export const correctPackageCheckin = call<
   { ok: boolean; refundCount: number; remaining: number; originalCount: number; refundedTotal: number }
 >("correctPackageCheckin");
 
+export const correctCourseAttendance = call<
+  { checkinId: string; reason: string },
+  { ok: boolean; attendedSessions: number; totalSessions: number; restoredEnrollmentStatus: boolean }
+>("correctCourseAttendance");
+
 export const rejectCheckin = call<
   { requestId: string; reason: string },
   { ok: boolean }
