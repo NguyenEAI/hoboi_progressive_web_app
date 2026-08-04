@@ -213,7 +213,17 @@ export const correctPackageCheckin = call<
 
 export const correctCourseAttendance = call<
   { checkinId: string; reason: string },
-  { ok: boolean; attendedSessions: number; totalSessions: number; restoredEnrollmentStatus: boolean }
+  {
+    ok: boolean;
+    attendedSessions: number;
+    totalSessions: number;
+    restoredEnrollmentStatus: boolean;
+    studentName?: string;
+    coachName?: string | null;
+    checkinTimeText?: string | null;
+    scheduledTimeText?: string | null;
+    memberCode?: string | null;
+  }
 >("correctCourseAttendance");
 
 export const rejectCheckin = call<

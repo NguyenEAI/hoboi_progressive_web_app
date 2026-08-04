@@ -81,6 +81,21 @@ test("course attendance undo restores slot only when undoing completion attendan
   assert.equal(result.after, 14);
   assert.equal(result.restoreActive, true);
   assert.equal(result.slotEnrolledAfter, 20);
+  assert.equal(result.slotRestoreSkipped, false);
+});
+
+test("course attendance undo can restore completed legacy course when slot data is missing", () => {
+  const result = computeCourseAttendanceUndo({
+    attendedSessions: 15,
+    totalSessions: 15,
+    alreadyUndone: false,
+    enrollmentStatus: "COMPLETED",
+    completedByThisCheckin: true,
+  });
+  assert.equal(result.after, 14);
+  assert.equal(result.restoreActive, true);
+  assert.equal(result.slotEnrolledAfter, undefined);
+  assert.equal(result.slotRestoreSkipped, true);
 });
 
 test("course attendance undo blocks duplicate undo and full slot restore", () => {

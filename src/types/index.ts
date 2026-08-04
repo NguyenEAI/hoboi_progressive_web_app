@@ -52,6 +52,31 @@ export type CheckInKind = "PACKAGE" | "MEMBERSHIP" | "COURSE";
 export type CheckInResult = "ACCEPTED" | "REJECTED";
 export type SkillLevel = "NOT_STARTED" | "LEARNING" | "COMPLETED";
 
+export interface CourseAttendanceContext {
+  enrollmentId: string;
+  attendanceId: string;
+  memberCode?: string | null;
+  studentId?: string | null;
+  studentKind?: "USER" | "CHILD" | null;
+  studentName: string;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  parentId?: string | null;
+  parentName?: string | null;
+  coachId?: string | null;
+  coachName?: string | null;
+  slotId?: string | null;
+  scheduledWeekday?: number | null;
+  scheduledStartHour?: number | null;
+  scheduledEndHour?: number | null;
+  scheduledTimeText?: string | null;
+  checkinAt?: TS | null;
+  checkinTimeText?: string | null;
+  attendedSessions?: number | null;
+  totalSessions?: number | null;
+}
+
 export interface CourseAttendanceCorrection {
   at: TS;
   by: string;
@@ -64,6 +89,17 @@ export interface CourseAttendanceCorrection {
   totalSessions: number;
   restoredEnrollmentStatus: boolean;
   slotEnrolledAfter?: number | null;
+  slotRestoreSkipped?: boolean;
+  context?: CourseAttendanceContext;
+  memberCode?: string | null;
+  studentName?: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  parentName?: string | null;
+  coachName?: string | null;
+  checkinAt?: TS | null;
+  checkinTimeText?: string | null;
+  scheduledTimeText?: string | null;
 }
 
 // ---------- USERS ----------
@@ -312,6 +348,7 @@ export interface CheckIn {
   attendanceId?: string;
   attendancePath?: string;
   completedEnrollment?: boolean;
+  courseAttendanceContext?: CourseAttendanceContext;
   courseAttendanceUndo?: CourseAttendanceCorrection;
   at: TS;
 }

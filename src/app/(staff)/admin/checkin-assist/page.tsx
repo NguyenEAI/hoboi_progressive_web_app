@@ -1,10 +1,10 @@
 "use client";
 import { useState } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { staffCheckinByPhone, searchCustomerByPhone, correctPackageCheckin, correctCourseAttendance, extendService } from "@/lib/callable";
-import type { User, Child, Membership, TicketPackage, Enrollment, CheckIn } from "@/types";
-import { formatDate } from "@/lib/utils";
+import type { User, Child, Membership, TicketPackage, Enrollment, CheckIn, CourseAttendanceContext } from "@/types";
+import { formatDate, toDate } from "@/lib/utils";
 import { getPackageExpiryDate, isPackageExpired } from "@/lib/packageExpiry";
 import { Ticket, Calendar, GraduationCap, Search } from "lucide-react";
 import { StaffPassPhoto } from "@/components/StaffPassPhoto";
@@ -76,16 +76,19 @@ export default function CheckinAssistPage() {
         ]).then(([a, b]) => ({ docs: [...a.docs, ...b.docs] })),
       ]);
 
-      setChildren(cs.docs.map((d) => ({ id: d.id, ...d.data() } as Child)));
+      const childList = cs.docs.map((d) => ({ id: d.id, ...d.data() } as Child));
+      const packageList = pkgs.docs
+        .map((d) => ({ id: d.id, ...d.data() } as TicketPackage))
+        .filter((p) => p.status !== "SUSPENDED")
+        .sort((a, b) => Number(isPackageExpired(a)) - Number(isPackageExpired(b)));
+      const enrollmentList = enrs.docs.map((d) => ({ id: d.id, ...d.data() } as Enrollment));
+      setChildren(childList);
       setTickets({
         memberships: mems.docs.map((d) => ({ id: d.id, ...d.data() } as Membership)),
-        packages: pkgs.docs
-          .map((d) => ({ id: d.id, ...d.data() } as TicketPackage))
-          .filter((p) => p.status !== "SUSPENDED")
-          .sort((a, b) => Number(isPackageExpired(a)) - Number(isPackageExpired(b))),
-        enrollments: enrs.docs.map((d) => ({ id: d.id, ...d.data() } as Enrollment)),
+        packages: packageList,
+        enrollments: enrollmentList,
       });
-      await loadRecentCheckins(p.id);
+      await loadRecentCheckins(p.id, p, childList, enrollmentList);
     } catch (e) {
       const msg = (e as Error).message ?? "";
       if (msg.startsWith("not-found:")) {
@@ -121,14 +124,19 @@ export default function CheckinAssistPage() {
     }
   }
 
-  async function loadRecentCheckins(userId: string) {
+  async function loadRecentCheckins(
+    userId: string,
+    currentCustomer?: User,
+    currentChildren: Child[] = [],
+    currentEnrollments: Enrollment[] = [],
+  ) {
     const snap = await getDocs(query(collection(db, "checkins"), where("userId", "==", userId)));
     const list = snap.docs
       .map((d) => ({ id: d.id, ...d.data() } as CheckIn))
       .filter((c) => (c.kind === "PACKAGE" || c.kind === "COURSE") && c.result === "ACCEPTED")
       .sort((a, b) => timeMs(b.at) - timeMs(a.at))
       .slice(0, 8);
-    setRecentCheckins(list);
+    setRecentCheckins(await enrichCourseCheckins(list, currentCustomer, currentChildren, currentEnrollments));
   }
 
   async function checkinPackage(p: TicketPackage, count: number, reason: string) {
@@ -149,7 +157,7 @@ export default function CheckinAssistPage() {
         reason: reason.trim(),
       });
       setMsg(`✅ ${r.message} — đã gửi thông báo cho khách.`);
-      await loadRecentCheckins(customer.id);
+      await loadRecentCheckins(customer.id, customer, children, tickets.enrollments);
       await search();
     } catch (e) {
       setError((e as Error).message);
@@ -182,7 +190,13 @@ export default function CheckinAssistPage() {
     try {
       const r = await correctCourseAttendance({ checkinId, reason });
       await search();
-      setMsg(`✅ Đã hủy 1 buổi điểm danh khóa học. Số buổi đã học còn ${r.attendedSessions}/${r.totalSessions}.`);
+      const detail = [
+        r.studentName ? `HV ${r.studentName}` : null,
+        r.coachName ? `HLV ${r.coachName}` : null,
+        r.checkinTimeText ? `check-in ${r.checkinTimeText}` : null,
+        r.scheduledTimeText ? `lịch ${r.scheduledTimeText}` : null,
+      ].filter(Boolean).join(" · ");
+      setMsg(`✅ Đã hủy 1 buổi điểm danh khóa học${detail ? `: ${detail}` : ""}. Còn ${r.attendedSessions}/${r.totalSessions} buổi.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -220,7 +234,7 @@ export default function CheckinAssistPage() {
         forceKind: "COURSE",
         targetId: e.id,
       });
-      await loadRecentCheckins(customer.id);
+      await loadRecentCheckins(customer.id, customer, children, tickets.enrollments);
       await search();
       setMsg(`✅ ${r.message} — đã gửi thông báo cho khách.`);
     } catch (err) {
@@ -383,11 +397,146 @@ export default function CheckinAssistPage() {
 
 function timeMs(value: unknown): number {
   if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
   if (typeof value === "string") return new Date(value).getTime() || 0;
   if (typeof value === "object" && value && "toMillis" in value && typeof (value as { toMillis?: unknown }).toMillis === "function") {
     return ((value as { toMillis: () => number }).toMillis());
   }
+  if (typeof value === "object" && value && "seconds" in value) {
+    return Number((value as { seconds?: unknown }).seconds ?? 0) * 1000;
+  }
   return 0;
+}
+
+type CourseSlotData = {
+  weekday?: number;
+  startHour?: number;
+  endHour?: number;
+};
+
+async function enrichCourseCheckins(
+  list: CheckIn[],
+  currentCustomer?: User,
+  currentChildren: Child[] = [],
+  currentEnrollments: Enrollment[] = [],
+): Promise<CheckIn[]> {
+  const enrollmentMap = new Map(currentEnrollments.map((e) => [e.id, e]));
+  const childMap = new Map(currentChildren.map((c) => [c.id, c]));
+
+  return Promise.all(list.map(async (checkin) => {
+    if (checkin.kind !== "COURSE") return checkin;
+    const storedContext = checkin.courseAttendanceContext ?? checkin.courseAttendanceUndo?.context;
+    if (storedContext) return { ...checkin, courseAttendanceContext: storedContext };
+
+    let enrollment = enrollmentMap.get(checkin.refId);
+    if (!enrollment && checkin.refId) {
+      const enrollmentSnap = await getDoc(doc(db, "enrollments", checkin.refId));
+      if (enrollmentSnap.exists()) {
+        enrollment = { id: enrollmentSnap.id, ...enrollmentSnap.data() } as Enrollment;
+        enrollmentMap.set(enrollment.id, enrollment);
+      }
+    }
+    if (!enrollment) return checkin;
+
+    let slot: CourseSlotData | undefined;
+    if (enrollment.coachId && enrollment.slotId) {
+      const slotSnap = await getDoc(doc(db, "coaches", enrollment.coachId, "slots", enrollment.slotId));
+      if (slotSnap.exists()) slot = slotSnap.data() as CourseSlotData;
+    }
+
+    return {
+      ...checkin,
+      courseAttendanceContext: buildClientCourseContext(checkin, enrollment, slot, currentCustomer, childMap),
+    };
+  }));
+}
+
+function buildClientCourseContext(
+  checkin: CheckIn,
+  enrollment: Enrollment,
+  slot: CourseSlotData | undefined,
+  currentCustomer: User | undefined,
+  childMap: Map<string, Child>,
+): CourseAttendanceContext {
+  const parsedSlot = parseSlotSchedule(enrollment.slotId);
+  const scheduledWeekday = numberOrNull(slot?.weekday) ?? parsedSlot.weekday;
+  const scheduledStartHour = numberOrNull(slot?.startHour) ?? parsedSlot.startHour;
+  const scheduledEndHour = numberOrNull(slot?.endHour) ?? parsedSlot.endHour;
+  const child = childMap.get(enrollment.studentId);
+  const studentName = safeText(enrollment.studentName) ?? safeText(child?.fullName) ?? "Học viên";
+  const customerName = safeText(currentCustomer?.fullName);
+  const checkinTimeText = formatDateTime(checkin.at);
+
+  return {
+    enrollmentId: enrollment.id,
+    attendanceId: safeText(checkin.attendanceId) ?? safeText(checkin.attendancePath)?.split("/").pop() ?? isoDateFromUnknown(checkin.at) ?? "chưa rõ",
+    memberCode: safeText(enrollment.memberCode),
+    studentId: safeText(enrollment.studentId) ?? safeText(checkin.beneficiaryId),
+    studentKind: enrollment.studentKind ?? null,
+    studentName,
+    customerId: safeText(checkin.userId),
+    customerName,
+    customerPhone: safeText(currentCustomer?.phone),
+    parentId: safeText(enrollment.parentId),
+    parentName: enrollment.parentId ? customerName : null,
+    coachId: safeText(enrollment.coachId),
+    coachName: safeText(enrollment.coachName),
+    slotId: safeText(enrollment.slotId),
+    scheduledWeekday,
+    scheduledStartHour,
+    scheduledEndHour,
+    scheduledTimeText: formatLessonTime(scheduledWeekday, scheduledStartHour, scheduledEndHour),
+    checkinAt: checkin.at,
+    checkinTimeText,
+    attendedSessions: numberOrNull(enrollment.attendedSessions),
+    totalSessions: numberOrNull(enrollment.totalSessions),
+  };
+}
+
+function safeText(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseSlotSchedule(slotId: unknown) {
+  const parts = String(slotId ?? "").split("_");
+  const weekday = numberOrNull(parts[parts.length - 2]);
+  const startHour = numberOrNull(parts[parts.length - 1]);
+  return {
+    weekday,
+    startHour,
+    endHour: startHour === null ? null : startHour + 1,
+  };
+}
+
+function formatLessonTime(weekday: number | null, startHour: number | null, endHour: number | null): string | null {
+  if (weekday === null || startHour === null) return null;
+  const day = weekday === 0 ? "CN" : weekday >= 1 && weekday <= 6 ? `T${weekday + 1}` : null;
+  if (!day) return null;
+  return `${day}, ${String(startHour).padStart(2, "0")}:00-${String(endHour ?? startHour + 1).padStart(2, "0")}:00`;
+}
+
+function formatDateTime(value: unknown): string | null {
+  const d = toDate(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function isoDateFromUnknown(value: unknown): string | null {
+  const d = toDate(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 
@@ -564,16 +713,48 @@ function CourseAttendanceUndoCard({
   const [reason, setReason] = useState("");
   const undone = checkin.correctionStatus === "ATTENDANCE_UNDONE" || Boolean(checkin.courseAttendanceUndo);
   const disabled = busy || undone || !reason.trim();
+  const undo = checkin.courseAttendanceUndo;
+  const context = checkin.courseAttendanceContext ?? undo?.context;
+  const memberCode = context?.memberCode ?? undo?.memberCode;
+  const studentName = context?.studentName ?? undo?.studentName ?? "Học viên";
+  const accountName = context?.parentName
+    ? `Phụ huynh: ${context.parentName}`
+    : context?.customerName
+      ? `Khách: ${context.customerName}`
+      : "Khách/phụ huynh: chưa rõ";
+  const accountPhone = context?.customerPhone ? ` · ${context.customerPhone}` : "";
+  const coachName = context?.coachName ?? undo?.coachName ?? "chưa rõ";
+  const checkinTime = context?.checkinTimeText ?? undo?.checkinTimeText ?? formatDateTime(checkin.at) ?? "chưa rõ";
+  const scheduledTime = context?.scheduledTimeText ?? undo?.scheduledTimeText ?? "chưa có lịch";
+  const progressNow = undo
+    ? `${undo.afterAttended}/${undo.totalSessions} buổi sau khi hủy`
+    : context?.attendedSessions !== null && context?.attendedSessions !== undefined && context?.totalSessions
+      ? `${context.attendedSessions}/${context.totalSessions} buổi hiện tại`
+      : "đang cập nhật";
+  const statusText = undone ? "Đã hủy điểm danh" : "Chưa hủy · chỉ được hủy 1 lần cho buổi này";
 
   return (
     <div className="rounded-xl border border-red-100 bg-white p-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="font-medium text-slate-900">Khóa học · {formatDate(checkin.at)}</div>
+        <div className="min-w-0">
+          <div className="font-medium text-slate-900">
+            {memberCode ? `MS${memberCode} · ` : ""}{studentName}
+          </div>
           <div className="mt-1 text-xs text-slate-500">
-            {undone ? "Đã hủy điểm danh buổi này" : "Chưa hủy · chỉ được hủy 1 lần cho buổi này"}
+            {accountName}{accountPhone}
           </div>
         </div>
+        <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${undone ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>
+          {undone ? "Đã hủy" : "Có thể hủy"}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-700 sm:grid-cols-2">
+        <InfoLine label="HLV" value={coachName} />
+        <InfoLine label="Tiến độ" value={progressNow} />
+        <InfoLine label="Giờ check-in" value={checkinTime} />
+        <InfoLine label="Lịch học" value={scheduledTime} />
+        <InfoLine label="Mã check-in" value={checkin.id} />
+        <InfoLine label="Trạng thái" value={statusText} />
       </div>
       <input
         value={reason}
@@ -591,9 +772,18 @@ function CourseAttendanceUndoCard({
       </button>
       {checkin.courseAttendanceUndo && (
         <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
-          {formatDate(checkin.courseAttendanceUndo.at)} · còn {checkin.courseAttendanceUndo.afterAttended}/{checkin.courseAttendanceUndo.totalSessions} buổi. Lý do: {checkin.courseAttendanceUndo.reason}
+          {formatDateTime(checkin.courseAttendanceUndo.at) ?? formatDate(checkin.courseAttendanceUndo.at)} · còn {checkin.courseAttendanceUndo.afterAttended}/{checkin.courseAttendanceUndo.totalSessions} buổi. Lý do: {checkin.courseAttendanceUndo.reason}
         </div>
       )}
+    </div>
+  );
+}
+
+function InfoLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <span className="font-semibold text-slate-500">{label}: </span>
+      <span className="break-words text-slate-800">{value}</span>
     </div>
   );
 }

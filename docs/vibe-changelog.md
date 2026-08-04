@@ -4,6 +4,7 @@
 
 - Sửa lỗi autocomplete SĐT ở các màn quầy: khi bấm gợi ý, handler tìm kiếm nhận trực tiếp số đã chọn đầy đủ thay vì chờ React state cập nhật, tránh trường hợp chỉ tìm bằng tiền tố như `093`.
 - Thêm callable `correctCourseAttendance` cho Owner/Lễ tân hủy đúng 1 buổi điểm danh khóa học đã ghi khi học viên rời hồ trước khi học. Luồng bắt buộc lý do, chặn hủy trùng, giảm `attendedSessions`, ghi lịch sử trên attendance/enrollment/checkin, audit log và notification cho khách/phụ huynh.
+- Bổ sung ngữ cảnh đầy đủ cho hủy điểm danh khóa học: thẻ trong `/admin/checkin-assist`, thông báo thành công, audit log, `courseAttendanceUndo`, lịch sử correction và notification đều có học viên, phụ huynh/khách, HLV, giờ check-in, lịch học, mã MS, tiến độ và lý do khi có dữ liệu. Dữ liệu legacy thiếu `slotId`, `coachId`, `completedAt`, timestamp hoặc `present` cũ được xử lý bằng fallback rõ ràng thay vì lỗi `internal`.
 - Nếu buổi bị hủy là buổi đã làm khóa học chuyển `COMPLETED`, hệ thống mở lại enrollment về `ACTIVE` và tăng lại slot `enrolledCount` trong transaction; nếu slot đã đầy thì chặn để không vượt sức chứa.
 
 - Lễ tân/Owner có thể hoàn lượt ngay sau một lần check-in vé lượt khi khách không học/không xuống hồ; hệ thống bắt buộc lý do, chặn hoàn trùng/quá số lượt, cập nhật lượt còn, ghi lịch sử sửa sai/audit và gửi thông báo cho khách.

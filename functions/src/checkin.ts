@@ -170,6 +170,31 @@ type CheckinResult = {
 
 type CheckinExtra = Record<string, unknown>;
 
+type CourseAttendanceContext = {
+  enrollmentId: string;
+  attendanceId: string;
+  memberCode: string | null;
+  studentId: string | null;
+  studentKind: string | null;
+  studentName: string;
+  customerId: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  parentId: string | null;
+  parentName: string | null;
+  coachId: string | null;
+  coachName: string | null;
+  slotId: string | null;
+  scheduledWeekday: number | null;
+  scheduledStartHour: number | null;
+  scheduledEndHour: number | null;
+  scheduledTimeText: string | null;
+  checkinAt: admin.firestore.Timestamp | null;
+  checkinTimeText: string | null;
+  attendedSessions: number | null;
+  totalSessions: number | null;
+};
+
 // Ưu tiên: COURSE (đúng ca giờ này) → PACKAGE → MEMBERSHIP
 // v2.3 (D9): nếu `forceKind` truyền vào → bỏ qua các kind khác, chỉ thử kind đó.
 async function resolveCheckin(
@@ -586,14 +611,16 @@ export function computeCourseAttendanceUndo(input: {
   const restoreActive = input.completedByThisCheckin && input.enrollmentStatus === "COMPLETED";
 
   if (restoreActive) {
+    if (input.slotEnrolledCount === undefined || input.slotCapacity === undefined)
+      return { before, after, total, restoreActive, slotEnrolledAfter: undefined, slotRestoreSkipped: true } as const;
     const enrolled = Math.max(0, Math.floor(Number(input.slotEnrolledCount ?? 0)));
     const capacity = Math.max(1, Math.floor(Number(input.slotCapacity ?? 20)));
     if (enrolled >= capacity)
       throw new HttpsError("failed-precondition", "Ca học đã đủ chỗ, không thể mở lại khóa học này tự động");
-    return { before, after, total, restoreActive, slotEnrolledAfter: enrolled + 1 } as const;
+    return { before, after, total, restoreActive, slotEnrolledAfter: enrolled + 1, slotRestoreSkipped: false } as const;
   }
 
-  return { before, after, total, restoreActive, slotEnrolledAfter: undefined } as const;
+  return { before, after, total, restoreActive, slotEnrolledAfter: undefined, slotRestoreSkipped: false } as const;
 }
 
 async function afterCheckin(r: CheckinResult) {
@@ -612,15 +639,120 @@ async function afterCheckin(r: CheckinResult) {
 const pad = (n: number) => String(n).padStart(2, "0");
 const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const viDate = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-function toJsDate(value: unknown): Date {
-  if (value instanceof Date) return value;
-  if (value && typeof value === "object" && "toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function")
-    return (value as { toDate: () => Date }).toDate();
+const viDateTime = (d: Date) => `${viDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function maybeJsDate(value: unknown): Date | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (value && typeof value === "object" && "toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    const d = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   if (typeof value === "string" || typeof value === "number") {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
+  return null;
+}
+function toJsDate(value: unknown): Date {
+  const parsed = maybeJsDate(value);
+  if (parsed) return parsed;
   return new Date(0);
+}
+function nonEmptyString(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+function numberOrNull(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+function weekdayText(value: number | null) {
+  if (value === null) return null;
+  if (value === 0) return "CN";
+  if (value >= 1 && value <= 6) return `T${value + 1}`;
+  return null;
+}
+function lessonTimeText(weekday: number | null, startHour: number | null, endHour: number | null) {
+  const day = weekdayText(weekday);
+  if (!day || startHour === null) return null;
+  return `${day}, ${pad(startHour)}:00-${pad(endHour ?? startHour + 1)}:00`;
+}
+function parseSlotSchedule(slotId: unknown) {
+  const parts = String(slotId ?? "").split("_");
+  const weekday = numberOrNull(parts[parts.length - 2]);
+  const startHour = numberOrNull(parts[parts.length - 1]);
+  return {
+    weekday,
+    startHour,
+    endHour: startHour === null ? null : startHour + 1,
+  };
+}
+function attendanceLooksPresent(value: unknown): boolean {
+  if (value === false || value === 0) return false;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["false", "absent", "vắng", "vang", "no", "0"].includes(normalized)) return false;
+    if (["true", "present", "có mặt", "co mat", "yes", "1"].includes(normalized)) return true;
+  }
+  return true;
+}
+function compactDetail<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+}
+function describeCourseContext(context: CourseAttendanceContext, reason: string) {
+  const parts = [
+    context.studentName,
+    context.coachName ? `HLV ${context.coachName}` : null,
+    context.checkinTimeText ? `check-in ${context.checkinTimeText}` : null,
+    context.scheduledTimeText ? `lịch ${context.scheduledTimeText}` : null,
+    context.memberCode ? `MS${context.memberCode}` : null,
+    `lý do: ${reason}`,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+function buildCourseAttendanceContext(input: {
+  checkinId: string;
+  checkin: FirebaseFirestore.DocumentData;
+  enrollmentId: string;
+  enrollment: FirebaseFirestore.DocumentData;
+  attendanceId: string;
+  attendance?: FirebaseFirestore.DocumentData;
+  slot?: FirebaseFirestore.DocumentData | null;
+  customer?: FirebaseFirestore.DocumentData | null;
+  parent?: FirebaseFirestore.DocumentData | null;
+  coach?: FirebaseFirestore.DocumentData | null;
+}): CourseAttendanceContext {
+  const parsedSlot = parseSlotSchedule(input.enrollment.slotId);
+  const scheduledWeekday = numberOrNull(input.slot?.weekday) ?? parsedSlot.weekday;
+  const scheduledStartHour = numberOrNull(input.slot?.startHour) ?? parsedSlot.startHour;
+  const scheduledEndHour = numberOrNull(input.slot?.endHour) ?? parsedSlot.endHour;
+  const checkinDate = maybeJsDate(input.checkin.at) ?? maybeJsDate(input.attendance?.at) ?? maybeJsDate(input.attendance?.date);
+  const parentId = nonEmptyString(input.enrollment.parentId);
+  const customerName = nonEmptyString(input.customer?.fullName);
+  const parentName = nonEmptyString(input.parent?.fullName) ?? (parentId ? customerName : null);
+  return {
+    enrollmentId: input.enrollmentId,
+    attendanceId: input.attendanceId,
+    memberCode: nonEmptyString(input.enrollment.memberCode),
+    studentId: nonEmptyString(input.enrollment.studentId) ?? nonEmptyString(input.checkin.beneficiaryId),
+    studentKind: nonEmptyString(input.enrollment.studentKind),
+    studentName: nonEmptyString(input.enrollment.studentName) ?? "học viên",
+    customerId: nonEmptyString(input.checkin.userId),
+    customerName,
+    customerPhone: nonEmptyString(input.customer?.phone),
+    parentId,
+    parentName,
+    coachId: nonEmptyString(input.enrollment.coachId),
+    coachName: nonEmptyString(input.enrollment.coachName) ?? nonEmptyString(input.coach?.fullName),
+    slotId: nonEmptyString(input.enrollment.slotId),
+    scheduledWeekday,
+    scheduledStartHour,
+    scheduledEndHour,
+    scheduledTimeText: lessonTimeText(scheduledWeekday, scheduledStartHour, scheduledEndHour),
+    checkinAt: checkinDate ? admin.firestore.Timestamp.fromDate(checkinDate) : null,
+    checkinTimeText: checkinDate ? viDateTime(checkinDate) : null,
+    attendedSessions: numberOrNull(input.enrollment.attendedSessions),
+    totalSessions: numberOrNull(input.enrollment.totalSessions),
+  };
 }
 function sameDate(a: Date, b: Date) {
   return isoDate(a) === isoDate(b);
@@ -845,12 +977,21 @@ export const correctCourseAttendance = onCall({ region: REGION }, async (req) =>
     if (c.result !== "ACCEPTED")
       throw new HttpsError("failed-precondition", "Lần điểm danh này không ở trạng thái đã nhận");
 
-    const enrollmentRef = db().doc(`enrollments/${c.refId}`);
+    const enrollmentId = nonEmptyString(c.refId);
+    if (!enrollmentId)
+      throw new HttpsError("failed-precondition", "Lần điểm danh thiếu mã khóa học");
+    const enrollmentRef = db().doc(`enrollments/${enrollmentId}`);
     const enrollmentSnap = await tx.get(enrollmentRef);
     if (!enrollmentSnap.exists) throw new HttpsError("not-found", "Không tìm thấy khóa học");
     const e = enrollmentSnap.data()!;
 
-    const attendanceId = String(c.attendanceId ?? isoDate(toJsDate(c.at)));
+    const attendanceIdFromPath = nonEmptyString(c.attendancePath)?.split("/").pop() ?? null;
+    const attendanceId =
+      nonEmptyString(c.attendanceId) ??
+      attendanceIdFromPath ??
+      (maybeJsDate(c.at) ? isoDate(toJsDate(c.at)) : null);
+    if (!attendanceId)
+      throw new HttpsError("failed-precondition", "Lần điểm danh cũ thiếu ngày buổi học để hủy");
     const attendanceRef = enrollmentRef.collection("attendances").doc(attendanceId);
     const attendanceSnap = await tx.get(attendanceRef);
     if (!attendanceSnap.exists) throw new HttpsError("not-found", "Không tìm thấy buổi điểm danh của khóa học");
@@ -858,26 +999,42 @@ export const correctCourseAttendance = onCall({ region: REGION }, async (req) =>
     const alreadyUndone =
       Boolean(c.courseAttendanceUndo) ||
       c.correctionStatus === "ATTENDANCE_UNDONE" ||
-      Boolean(attendance.undoneAt);
+      Boolean(attendance.undoneAt) ||
+      Boolean(attendance.undoReason);
     if (alreadyUndone)
       throw new HttpsError("failed-precondition", "Buổi điểm danh này đã được hủy trước đó");
-    if (attendance.present !== true)
+    if (!attendanceLooksPresent(attendance.present))
       throw new HttpsError("failed-precondition", "Buổi điểm danh này không còn ở trạng thái có mặt");
 
-    const completedByThisCheckin = Boolean(c.completedEnrollment) || (
-      e.status === "COMPLETED" &&
-      sameDate(toJsDate(c.at), toJsDate(e.completedAt))
-    );
+    const checkinAt = maybeJsDate(c.at);
+    const completedAt = maybeJsDate(e.completedAt);
+    const attendanceAt = maybeJsDate(attendance.at) ?? maybeJsDate(attendance.date);
+    const completedByThisCheckin =
+      Boolean(c.completedEnrollment) ||
+      (
+        e.status === "COMPLETED" &&
+        (
+          (checkinAt && completedAt && sameDate(checkinAt, completedAt)) ||
+          (attendanceAt && completedAt && sameDate(attendanceAt, completedAt)) ||
+          (!completedAt && Number(e.attendedSessions ?? 0) >= Number(e.totalSessions ?? SWIM_COURSE_TOTAL_SESSIONS))
+        )
+      );
     if (e.status === "COMPLETED" && !completedByThisCheckin)
       throw new HttpsError("failed-precondition", "Khóa học đã hoàn tất; chỉ có thể hủy buổi đã làm hoàn tất khóa");
     if (!["ACTIVE", "COMPLETED"].includes(String(e.status)))
       throw new HttpsError("failed-precondition", "Khóa học không còn ở trạng thái có thể hủy điểm danh");
 
     let slotSnap: FirebaseFirestore.DocumentSnapshot | undefined;
-    if (completedByThisCheckin) {
-      slotSnap = await tx.get(db().doc(`coaches/${e.coachId}/slots/${e.slotId}`));
-      if (!slotSnap.exists) throw new HttpsError("not-found", "Ca học không tồn tại");
+    const coachId = nonEmptyString(e.coachId);
+    const slotId = nonEmptyString(e.slotId);
+    if (coachId && slotId) {
+      slotSnap = await tx.get(db().doc(`coaches/${coachId}/slots/${slotId}`));
     }
+    const coachSnap = coachId ? await tx.get(db().doc(`coaches/${coachId}`)) : undefined;
+    const customerId = nonEmptyString(c.userId);
+    const customerSnap = customerId ? await tx.get(db().doc(`users/${customerId}`)) : undefined;
+    const parentId = nonEmptyString(e.parentId);
+    const parentSnap = parentId && parentId !== customerId ? await tx.get(db().doc(`users/${parentId}`)) : undefined;
 
     const undoPlan = computeCourseAttendanceUndo({
       attendedSessions: Number(e.attendedSessions ?? 0),
@@ -885,8 +1042,21 @@ export const correctCourseAttendance = onCall({ region: REGION }, async (req) =>
       alreadyUndone,
       enrollmentStatus: String(e.status),
       completedByThisCheckin,
-      slotEnrolledCount: slotSnap?.data()?.enrolledCount,
-      slotCapacity: slotSnap?.data()?.capacity,
+      slotEnrolledCount: slotSnap?.exists ? Number(slotSnap.data()?.enrolledCount ?? 0) : undefined,
+      slotCapacity: slotSnap?.exists ? Number(slotSnap.data()?.capacity ?? 20) : undefined,
+    });
+
+    const context = buildCourseAttendanceContext({
+      checkinId,
+      checkin: c,
+      enrollmentId,
+      enrollment: e,
+      attendanceId,
+      attendance,
+      slot: slotSnap?.exists ? slotSnap.data() ?? null : null,
+      customer: customerSnap?.exists ? customerSnap.data() ?? null : null,
+      parent: parentSnap?.exists ? parentSnap.data() ?? null : null,
+      coach: coachSnap?.exists ? coachSnap.data() ?? null : null,
     });
 
     const correction = {
@@ -901,6 +1071,17 @@ export const correctCourseAttendance = onCall({ region: REGION }, async (req) =>
       totalSessions: undoPlan.total,
       restoredEnrollmentStatus: undoPlan.restoreActive,
       slotEnrolledAfter: undoPlan.slotEnrolledAfter ?? null,
+      slotRestoreSkipped: undoPlan.slotRestoreSkipped,
+      context,
+      memberCode: context.memberCode,
+      studentName: context.studentName,
+      customerName: context.customerName,
+      customerPhone: context.customerPhone,
+      parentName: context.parentName,
+      coachName: context.coachName,
+      checkinAt: context.checkinAt,
+      checkinTimeText: context.checkinTimeText,
+      scheduledTimeText: context.scheduledTimeText,
     };
 
     tx.update(attendanceRef, {
@@ -917,45 +1098,59 @@ export const correctCourseAttendance = onCall({ region: REGION }, async (req) =>
         ? { status: "ACTIVE", completedAt: admin.firestore.FieldValue.delete() }
         : {}),
     });
-    if (undoPlan.restoreActive && slotSnap?.ref) {
+    if (undoPlan.restoreActive && slotSnap?.exists && undoPlan.slotEnrolledAfter !== undefined) {
       tx.update(slotSnap.ref, { enrolledCount: undoPlan.slotEnrolledAfter });
     }
     tx.update(checkinRef, {
       correctionStatus: "ATTENDANCE_UNDONE",
       courseAttendanceUndo: correction,
+      courseAttendanceContext: context,
     });
     tx.set(db().collection("auditLogs").doc(), {
       actorId: req.auth!.uid,
       action: "COURSE_ATTENDANCE_UNDONE",
       targetType: "checkin",
       targetId: checkinId,
-      description: `Hủy điểm danh khóa học: ${cleanReason}`,
-      detail: {
-        enrollmentId: c.refId,
+      description: `Hủy điểm danh khóa học: ${describeCourseContext(context, cleanReason)}`,
+      detail: compactDetail({
+        enrollmentId,
         userId: c.userId,
         beneficiaryId: c.beneficiaryId ?? null,
         attendanceId,
         beforeAttended: undoPlan.before,
         afterAttended: undoPlan.after,
         restoredEnrollmentStatus: undoPlan.restoreActive,
+        slotRestoreSkipped: undoPlan.slotRestoreSkipped,
         reason: cleanReason,
-      },
+        context,
+      }),
       at: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     return {
-      userId: ((e.parentId as string | undefined) ?? (c.userId as string)),
+      userId: (parentId ?? customerId ?? (c.userId as string)),
       attendedSessions: undoPlan.after,
       totalSessions: undoPlan.total,
-      studentName: String(e.studentName ?? "học viên"),
+      studentName: context.studentName,
+      coachName: context.coachName,
+      checkinTimeText: context.checkinTimeText,
+      scheduledTimeText: context.scheduledTimeText,
+      memberCode: context.memberCode,
       restoredEnrollmentStatus: undoPlan.restoreActive,
+      reason: cleanReason,
     };
   });
 
   try {
     await db().collection("users").doc(result.userId).collection("notifications").add({
       title: "Đã hủy điểm danh khóa học",
-      body: `Hồ bơi đã hủy 1 buổi điểm danh của ${result.studentName}. Số buổi đã học còn ${result.attendedSessions}/${result.totalSessions}.`,
+      body: `Hồ bơi đã hủy 1 buổi điểm danh của ${result.studentName}. ${[
+        result.coachName ? `HLV ${result.coachName}` : null,
+        result.checkinTimeText ? `Check-in ${result.checkinTimeText}` : null,
+        result.scheduledTimeText ? `Lịch học ${result.scheduledTimeText}` : null,
+        `Lý do: ${result.reason}`,
+        `Còn ${result.attendedSessions}/${result.totalSessions} buổi`,
+      ].filter(Boolean).join(" · ")}.`,
       type: "GENERAL",
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
