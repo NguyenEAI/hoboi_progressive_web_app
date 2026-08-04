@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { searchCustomerByPhone, createCustomerByPhone, createCounterSale } from "@/lib/callable";
@@ -10,6 +10,7 @@ import { formatVND } from "@/lib/utils";
 import { PACKAGE_SIZES, PASS_DURATIONS, SLOT_START_HOURS, SWIM_STYLES, WEEKDAY_LABELS } from "@/lib/constants";
 import type { Audience, Child, Coach, Enrollment, Membership, PackageSize, PassDuration, ProductType, SwimStyle, TicketPackage } from "@/types";
 import { Camera, ImagePlus, RotateCcw, Search, UserPlus, WalletCards, Waves, GraduationCap, Ticket, X } from "lucide-react";
+import { StaffPhoneAutocomplete } from "@/components/StaffPhoneAutocomplete";
 
 type CustomerHit = {
   id: string;
@@ -49,7 +50,6 @@ type PhotoState = {
 export default function CounterSalePage() {
   const { pricing } = usePricing();
   const [phone, setPhone] = useState("");
-  const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -124,7 +124,7 @@ export default function CounterSalePage() {
   }
 
   async function findCustomer() {
-    const raw = normalizePhoneInput(phoneInputRef.current?.value ?? phone);
+    const raw = normalizePhoneInput(phone);
     if (!raw) return;
     setPhone(raw);
     setSearching(true);
@@ -164,7 +164,7 @@ export default function CounterSalePage() {
   }
 
   async function createCustomer() {
-    const raw = normalizePhoneInput(phoneInputRef.current?.value ?? phone);
+    const raw = normalizePhoneInput(phone);
     if (!raw || !newName.trim()) return;
     setPhone(raw);
     setCreating(true);
@@ -331,13 +331,14 @@ export default function CounterSalePage() {
           <section className="rounded-[2rem] border border-white/80 bg-white/85 p-5 shadow-[0_24px_80px_rgba(15,118,110,0.10)] backdrop-blur">
             <label className="text-sm font-bold text-slate-600">Tìm khách bằng SĐT</label>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-              <input
-                ref={phoneInputRef}
+              <StaffPhoneAutocomplete
                 value={phone}
-                onChange={(e) => setPhone(normalizePhoneInput(e.target.value))}
-                onInput={(e) => setPhone(normalizePhoneInput((e.target as HTMLInputElement).value))}
-                onKeyDown={(e) => { if (e.key === "Enter") void findCustomer(); }}
+                onChange={setPhone}
+                onSelect={() => setTimeout(() => void findCustomer(), 0)}
+                onEnter={() => void findCustomer()}
+                normalize={normalizePhoneInput}
                 placeholder="0905 123 456"
+                containerClassName="min-w-0 flex-1"
                 className="min-w-0 flex-1 rounded-2xl border-2 border-brand-100 bg-white px-5 py-4 text-2xl font-extrabold tracking-wide text-brand-950 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
               />
               <button

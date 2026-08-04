@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { sendPromotion } from "@/lib/callable";
+import { StaffPhoneAutocomplete } from "@/components/StaffPhoneAutocomplete";
 
 const AUDIENCES = [
   { id: "TEST_PHONE", label: "Gửi thử theo SĐT" },
@@ -49,7 +50,7 @@ export default function PromotionsPage() {
         {audience === "TEST_PHONE" && (
           <>
             <label className="mt-4 block text-sm font-bold text-slate-600">SĐT gửi thử</label>
-            <input value={testPhone} onChange={(e) => setTestPhone(e.target.value.replace(/[^0-9+]/g, ""))} className="mt-1 w-full rounded-xl border-2 border-slate-200 p-3" />
+            <StaffPhoneAutocomplete value={testPhone} onChange={setTestPhone} className="mt-1 w-full rounded-xl border-2 border-slate-200 p-3" />
           </>
         )}
         <div className="mt-5 rounded-2xl bg-brand-50 p-4">

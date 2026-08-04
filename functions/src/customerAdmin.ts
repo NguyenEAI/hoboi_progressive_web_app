@@ -12,8 +12,18 @@ const AUDIENCES = new Set(["CHILD_UNDER_140", "CHILD_OVER_140", "ADULT"]);
 const MEMBERSHIP_STATUSES = new Set(["ACTIVE", "EXPIRED", "SUSPENDED"]);
 const PACKAGE_STATUSES = new Set(["ACTIVE", "DEPLETED", "EXPIRED", "SUSPENDED"]);
 const COURSE_STATUSES = new Set(["PENDING", "ACTIVE", "COMPLETED", "EXPIRED", "CANCELLED"]);
+const PASS_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
 type ServiceKind = "MEMBERSHIP" | "PACKAGE" | "COURSE";
+
+function requireStaffActor(req: any): { actorId: string; role: string } {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Cần đăng nhập");
+  const role = String(req.auth.token.role ?? "");
+  if (!["OWNER", "RECEPTIONIST"].includes(role)) {
+    throw new HttpsError("permission-denied", "Không đủ quyền");
+  }
+  return { actorId: req.auth.uid, role };
+}
 
 export function assertReason(reason: unknown): string {
   const value = String(reason ?? "").trim();
@@ -218,6 +228,55 @@ export const ownerUpdateCustomerService = onCall({ region: REGION, cors: true },
   return result;
 });
 
+export const updateMembershipPassPhoto = onCall({ region: REGION, cors: true }, async (req) => {
+  const { actorId, role } = requireStaffActor(req);
+  const customerId = String(req.data?.customerId ?? "").trim();
+  const membershipId = String(req.data?.membershipId ?? "").trim();
+  const reason = assertReason(req.data?.reason);
+  if (!customerId || !membershipId) throw new HttpsError("invalid-argument", "Thiếu khách hàng hoặc vé thời hạn");
+
+  const ref = db().doc(`memberships/${membershipId}`);
+  const now = admin.firestore.Timestamp.now();
+  const result = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Không tìm thấy vé thời hạn");
+    const current = snap.data() ?? {};
+    assertServiceBelongsToCustomer("MEMBERSHIP", current, customerId);
+    const passPhoto = await validateMembershipPassPhoto(
+      actorId,
+      customerId,
+      String(current.holderKind ?? ""),
+      String(current.holderId ?? ""),
+      req.data?.passPhoto,
+    );
+    const before = current.passPhoto ?? null;
+    tx.update(ref, {
+      passPhoto,
+      updatedAt: now,
+      updatedBy: actorId,
+      photoUpdateHistory: FV.arrayUnion({
+        at: now,
+        by: actorId,
+        role,
+        reason,
+        before,
+        after: passPhoto,
+      }),
+    });
+    tx.set(db().collection("auditLogs").doc(), {
+      actorId,
+      action: "UPDATE_MEMBERSHIP_PASS_PHOTO",
+      targetType: "membership",
+      targetId: membershipId,
+      description: "Cập nhật ảnh vé thời hạn",
+      detail: { customerId, reason, before, after: passPhoto },
+      at: now,
+    });
+    return { ok: true, passPhoto };
+  });
+  return result;
+});
+
 async function assertPhoneAvailable(uid: string, phone: string) {
   try {
     const authUser = await admin.auth().getUserByPhoneNumber(phone);
@@ -241,6 +300,44 @@ function assertServiceBelongsToCustomer(kind: ServiceKind, data: Record<string, 
     return;
   }
   throw new HttpsError("permission-denied", "Dịch vụ không thuộc khách hàng này");
+}
+
+async function validateMembershipPassPhoto(
+  actorId: string,
+  customerId: string,
+  beneficiaryKind: string,
+  beneficiaryId: string,
+  rawPhoto: unknown,
+) {
+  const storagePath = String((rawPhoto as { storagePath?: unknown } | undefined)?.storagePath ?? "").replace(/^\/+/, "");
+  if (!storagePath) throw new HttpsError("invalid-argument", "Thiếu ảnh thẻ mới");
+  if (storagePath.includes("..") || storagePath.endsWith("/"))
+    throw new HttpsError("invalid-argument", "Đường dẫn ảnh không hợp lệ");
+  if (!["USER", "CHILD"].includes(beneficiaryKind) || !beneficiaryId)
+    throw new HttpsError("failed-precondition", "Vé thời hạn thiếu thông tin người dùng vé");
+
+  const expectedPrefix = `passPhotos/${customerId}/${beneficiaryKind}/${beneficiaryId}/drafts/`;
+  if (!storagePath.startsWith(expectedPrefix))
+    throw new HttpsError("permission-denied", "Ảnh thẻ không thuộc đúng khách/người dùng vé");
+
+  const file = admin.storage().bucket().file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) throw new HttpsError("failed-precondition", "Ảnh thẻ chưa upload thành công");
+
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "");
+  const sizeBytes = Number(metadata.size ?? 0);
+  if (!/^image\/(jpeg|png|webp)$/.test(contentType))
+    throw new HttpsError("invalid-argument", "Ảnh thẻ phải là JPG, PNG hoặc WebP");
+  if (!sizeBytes || sizeBytes > PASS_PHOTO_MAX_BYTES)
+    throw new HttpsError("invalid-argument", "Ảnh thẻ tối đa 4MB");
+
+  return {
+    storagePath,
+    contentType,
+    sizeBytes,
+    uploadedBy: actorId,
+  };
 }
 
 function checkedStatus(value: unknown, allowed: Set<string>) {

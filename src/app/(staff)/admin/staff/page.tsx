@@ -6,6 +6,7 @@ import { setUserRole, revokeUserRole } from "@/lib/callable";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import { normalizeVNPhone, isValidVNPhone10, displayVNPhone } from "@/lib/phone";
 import type { User, Coach } from "@/types";
+import { StaffPhoneAutocomplete, normalizeLocalPhone } from "@/components/StaffPhoneAutocomplete";
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: "Chủ hồ bơi", RECEPTIONIST: "Lễ tân", COACH: "Huấn luyện viên",
@@ -81,9 +82,14 @@ export default function StaffPage() {
           <div className="mt-3 space-y-2">
             <div>
               <label className="text-xs font-medium">Số điện thoại</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
-                inputMode="numeric" maxLength={10}
-                placeholder="0947010978" className="mt-1 w-full rounded-xl border-2 border-slate-200 bg-white p-2.5 tab-nums" />
+              <StaffPhoneAutocomplete
+                value={form.phone}
+                onChange={(phone) => setForm({ ...form, phone })}
+                normalize={normalizeLocalPhone}
+                onEnter={() => void submit()}
+                placeholder="0947010978"
+                className="mt-1 w-full rounded-xl border-2 border-slate-200 bg-white p-2.5 tab-nums"
+              />
             </div>
             <div>
               <label className="text-xs font-medium">Vai trò</label>

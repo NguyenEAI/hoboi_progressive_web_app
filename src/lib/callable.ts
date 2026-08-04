@@ -161,6 +161,15 @@ export const ownerUpdateCustomerService = call<
   },
   { ok: boolean; fields: string[] }
 >("ownerUpdateCustomerService");
+export const updateMembershipPassPhoto = call<
+  {
+    customerId: string;
+    membershipId: string;
+    reason: string;
+    passPhoto: { storagePath: string };
+  },
+  { ok: boolean; passPhoto: { storagePath: string; contentType?: string; sizeBytes?: number; uploadedBy?: string } }
+>("updateMembershipPassPhoto");
 
 // v2.4 (E4) — HLV ghi chú HV + báo nghỉ ca
 export const addCoachNote = call<

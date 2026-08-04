@@ -1,5 +1,11 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-05
+
+- Lễ tân/Owner có thể hoàn lượt ngay sau một lần check-in vé lượt khi khách không học/không xuống hồ; hệ thống bắt buộc lý do, chặn hoàn trùng/quá số lượt, cập nhật lượt còn, ghi lịch sử sửa sai/audit và gửi thông báo cho khách.
+- Staff xem được ảnh vé thời hạn trong hồ sơ khách, điểm danh hộ và từng thẻ vé thời hạn; lễ tân/Owner có thể thay ảnh bằng ảnh mới đã upload đúng vùng lưu trữ của khách/người dùng vé.
+- Dùng chung autocomplete SĐT cho các màn staff nhập số khách: gợi ý từ ký tự thứ ba theo tên/SĐT, chọn là điền số vào form, giữ khả năng nhập tay để tra Auth khi chưa có hồ sơ Firestore.
+
 ## 2026-07-31
 
 - Nâng cấp màn HLV `/coach` thành bảng vận hành mobile-first: hiển thị tổng học viên, lịch hôm nay, ca kế tiếp, các mục cần theo dõi và lối tắt tìm học viên/báo nghỉ ca.

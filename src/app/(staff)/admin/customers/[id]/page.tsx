@@ -37,6 +37,8 @@ import { db } from "@/lib/firebase/client";
 import { ownerUpdateCustomerProfile, ownerUpdateCustomerService, resetCustomerPasswordToDefault } from "@/lib/callable";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import { useToast } from "@/components/Toast";
+import { StaffPassPhoto } from "@/components/StaffPassPhoto";
+import { StaffPhoneAutocomplete, defaultNormalize } from "@/components/StaffPhoneAutocomplete";
 import type {
   Attendance,
   AuditLog,
@@ -92,6 +94,7 @@ export default function Customer360Page() {
   const { profile, loading: authLoading } = useAuthUser();
   const customerId = params?.id;
   const isOwner = profile?.role === "OWNER";
+  const isStaff = isOwner || profile?.role === "RECEPTIONIST";
   const [data, setData] = useState<Customer360 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -99,7 +102,7 @@ export default function Customer360Page() {
   const [serviceEdit, setServiceEdit] = useState<ServiceRow | null>(null);
 
   const load = useCallback(async () => {
-    if (!customerId || !isOwner) return;
+    if (!customerId || !isStaff) return;
     setLoading(true);
     setError(undefined);
     try {
@@ -148,16 +151,16 @@ export default function Customer360Page() {
     } finally {
       setLoading(false);
     }
-  }, [customerId, isOwner]);
+  }, [customerId, isStaff]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!isOwner) {
+    if (!isStaff) {
       router.replace("/admin/customers");
       return;
     }
     load();
-  }, [authLoading, isOwner, load, router]);
+  }, [authLoading, isStaff, load, router]);
 
   const services = useMemo<ServiceRow[]>(() => {
     if (!data) return [];
@@ -193,7 +196,7 @@ export default function Customer360Page() {
   if (authLoading || loading) {
     return <LoadingView />;
   }
-  if (!isOwner) return null;
+  if (!isStaff) return null;
   if (error || !data) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
@@ -229,18 +232,22 @@ export default function Customer360Page() {
           >
             <RefreshCw className="size-4" /> Tải lại
           </button>
-          <button
-            onClick={() => setProfileOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            <Edit3 className="size-4" /> Sửa hồ sơ
-          </button>
-          <button
-            onClick={resetPassword}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-          >
-            <KeyRound className="size-4" /> Reset mật khẩu 123456
-          </button>
+          {isOwner && (
+            <button
+              onClick={() => setProfileOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              <Edit3 className="size-4" /> Sửa hồ sơ
+            </button>
+          )}
+          {isOwner && (
+            <button
+              onClick={resetPassword}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              <KeyRound className="size-4" /> Reset mật khẩu 123456
+            </button>
+          )}
         </div>
       </header>
 
@@ -291,7 +298,13 @@ export default function Customer360Page() {
           {services.length ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {services.map((service) => (
-                <ServiceCard key={`${service.kind}-${service.id}`} service={service} onEdit={() => setServiceEdit(service)} />
+                <ServiceCard
+                  key={`${service.kind}-${service.id}`}
+                  customerId={data.customer.id}
+                  service={service}
+                  onEdit={isOwner ? () => setServiceEdit(service) : undefined}
+                  onPhotoUpdated={load}
+                />
               ))}
             </div>
           ) : (
@@ -344,7 +357,17 @@ export default function Customer360Page() {
   );
 }
 
-function ServiceCard({ service, onEdit }: { service: ServiceRow; onEdit: () => void }) {
+function ServiceCard({
+  customerId,
+  service,
+  onEdit,
+  onPhotoUpdated,
+}: {
+  customerId: string;
+  service: ServiceRow;
+  onEdit?: () => void;
+  onPhotoUpdated?: () => void | Promise<void>;
+}) {
   const data = service.data;
   const title =
     service.kind === "MEMBERSHIP"
@@ -376,16 +399,42 @@ function ServiceCard({ service, onEdit }: { service: ServiceRow; onEdit: () => v
         <Status value={data.status} />
       </div>
       <div className="mt-3 text-sm text-slate-600">{detail}</div>
+      {service.kind === "MEMBERSHIP" && (
+        <div className="mt-3">
+          <StaffPassPhoto customerId={customerId} membership={service.data as Membership} onUpdated={onPhotoUpdated} compact />
+        </div>
+      )}
+      {service.kind === "PACKAGE" && Boolean((service.data as TicketPackage).correctionHistory?.length) && (
+        <CorrectionHistory corrections={(service.data as TicketPackage).correctionHistory ?? []} />
+      )}
       <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
         <span>Order {data.orderId?.slice(0, 8) || "—"}</span>
-        <button
-          onClick={onEdit}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          <Edit3 className="size-3.5" /> Sửa
-        </button>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Edit3 className="size-3.5" /> Sửa
+          </button>
+        )}
       </div>
     </article>
+  );
+}
+
+function CorrectionHistory({ corrections }: { corrections: NonNullable<TicketPackage["correctionHistory"]> }) {
+  const recent = [...corrections].sort((a, b) => timeMs(b.at) - timeMs(a.at)).slice(0, 3);
+  return (
+    <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+      <div className="font-bold">Lịch sử hoàn lượt</div>
+      <div className="mt-2 space-y-1.5">
+        {recent.map((item, index) => (
+          <div key={`${item.checkinId}-${index}`}>
+            {formatDate(item.at)} · hoàn {item.refundCount} lượt · còn {item.afterRemaining}. Lý do: {item.reason}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -446,9 +495,23 @@ function CheckinsTable({ checkins }: { checkins: CheckIn[] }) {
             <tr key={c.id} className="border-t border-slate-100">
               <td className="py-3 pr-3 text-xs text-slate-500">{formatDate(c.at)}</td>
               <td className="py-3 pr-3">{serviceKindLabel(c.kind)}</td>
-              <td className="py-3 pr-3 font-semibold tabular-nums">{c.groupSize ?? 1}</td>
+              <td className="py-3 pr-3 font-semibold tabular-nums">
+                {c.groupSize ?? 1}
+                {c.refundedCount ? <span className="ml-1 text-xs font-medium text-amber-600">(-{c.refundedCount})</span> : null}
+              </td>
               <td className="py-3 pr-3"><Status value={c.result} /></td>
-              <td className="py-3 pr-3 text-xs text-slate-500">{c.reason || c.correctionStatus || "—"}</td>
+              <td className="py-3 pr-3 text-xs text-slate-500">
+                {c.reason || c.correctionStatus || "—"}
+                {Boolean(c.corrections?.length) && (
+                  <div className="mt-1 space-y-1 rounded-lg bg-amber-50 p-2 text-amber-800">
+                    {c.corrections!.slice(-2).map((item, index) => (
+                      <div key={`${c.id}-correction-${index}`}>
+                        Hoàn {item.refundCount} lượt · còn {item.afterRemaining} · {item.reason}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -543,7 +606,14 @@ function ProfileModal({
     <Modal title="Sửa hồ sơ khách hàng" onClose={onClose}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Họ tên"><input value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" /></Field>
-        <Field label="SĐT"><input value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, "").slice(0, 12))} className="input tabular-nums" /></Field>
+        <Field label="SĐT">
+          <StaffPhoneAutocomplete
+            value={phone}
+            onChange={setPhone}
+            normalize={(value) => defaultNormalize(value).slice(0, 12)}
+            className="input tabular-nums"
+          />
+        </Field>
         <Field label="Ngày sinh"><input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className="input" /></Field>
         <Field label="Chiều cao"><input type="number" min={60} max={220} value={heightCm} onChange={(e) => setHeightCm(e.target.value)} className="input" /></Field>
         <Field label="Nhóm giá">

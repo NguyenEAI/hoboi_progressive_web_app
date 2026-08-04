@@ -1,12 +1,14 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, query, where, getDocs, onSnapshot, limit } from "firebase/firestore";
+import { useState } from "react";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { staffCheckinByPhone, searchCustomerByPhone, correctPackageCheckin, extendService } from "@/lib/callable";
 import type { User, Child, Membership, TicketPackage, Enrollment, CheckIn } from "@/types";
 import { formatDate } from "@/lib/utils";
 import { getPackageExpiryDate, isPackageExpired } from "@/lib/packageExpiry";
 import { Ticket, Calendar, GraduationCap, Search } from "lucide-react";
+import { StaffPassPhoto } from "@/components/StaffPassPhoto";
+import { StaffPhoneAutocomplete } from "@/components/StaffPhoneAutocomplete";
 
 // v2.3 (D9): điểm danh hộ mở rộng cho VÉ LƯỢT (chọn số lượt) + khóa học + vé thời hạn.
 // v2.4 (E1): dùng callable searchCustomerByPhone — server normalize SĐT + 2-stage lookup
@@ -19,10 +21,6 @@ type Tickets = {
   enrollments: Enrollment[];
 };
 
-// v2.5: autocomplete SĐT. Load tất cả /users (rules cho staff list) + filter prefix client-side.
-// Đủ cho quy mô 2-3k khách. Khi lớn hơn có thể chuyển sang callable trả top-N từ index.
-type PhoneEntry = { uid: string; phone: string; local: string; fullName: string };
-
 export default function CheckinAssistPage() {
   const [phone, setPhone] = useState("");
   const [customer, setCustomer] = useState<User>();
@@ -32,46 +30,6 @@ export default function CheckinAssistPage() {
   const [msg, setMsg] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
-  const [allPhones, setAllPhones] = useState<PhoneEntry[]>([]);
-  const [showSuggest, setShowSuggest] = useState(false);
-  const suggestBoxRef = useRef<HTMLDivElement>(null);
-
-  // Load danh bạ khách (chỉ CUSTOMER/PARENT) cho autocomplete
-  useEffect(() => {
-    const q = query(collection(db, "users"), limit(2000));
-    return onSnapshot(q, (s) => {
-      const list: PhoneEntry[] = [];
-      s.docs.forEach((d) => {
-        const u = d.data();
-        const role = u.role as string | undefined;
-        if (role && ["OWNER", "RECEPTIONIST", "COACH"].includes(role)) return;
-        const phoneStr = (u.phone as string) ?? "";
-        if (!phoneStr) return;
-        const local = phoneStr.startsWith("+84") ? "0" + phoneStr.slice(3) : phoneStr;
-        list.push({ uid: d.id, phone: phoneStr, local, fullName: (u.fullName as string) ?? "" });
-      });
-      setAllPhones(list);
-    });
-  }, []);
-
-  const suggestions = useMemo(() => {
-    const k = phone.trim().replace(/\D/g, "");
-    if (k.length < 3) return [];
-    return allPhones
-      .filter((e) => e.local.includes(k) || e.phone.includes(k))
-      .slice(0, 8);
-  }, [phone, allPhones]);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (suggestBoxRef.current && !suggestBoxRef.current.contains(e.target as Node)) {
-        setShowSuggest(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
-
   async function search() {
     setMsg(undefined);
     setError(undefined);
@@ -154,7 +112,7 @@ export default function CheckinAssistPage() {
         forceKind: "MEMBERSHIP",
         targetId: m.id,
       });
-      setMsg(`✅ ${r.message} — đã gửi thông báo cho khách.`);
+      setMsg(`✅ ${r.message} — đã gửi thông báo cho khách. Nếu khách không xuống hồ/học, dùng mục hoàn lượt ngay bên dưới.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -264,60 +222,20 @@ export default function CheckinAssistPage() {
 
       <div className="mt-5">
         <label className="text-sm font-medium">SĐT khách</label>
-        <div className="relative mt-1 flex gap-2" ref={suggestBoxRef}>
-          <div className="relative flex-1">
-            <input
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                setShowSuggest(true);
-              }}
-              onFocus={() => setShowSuggest(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setShowSuggest(false);
-                  search();
-                } else if (e.key === "Escape") {
-                  setShowSuggest(false);
-                }
-              }}
-              placeholder="0905 xxx xxx"
-              autoComplete="off"
-              className="w-full rounded-xl border-2 border-slate-200 p-3"
-            />
-            {showSuggest && suggestions.length > 0 && (
-              <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-                {suggestions.map((s) => (
-                  <li key={s.uid}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhone(s.local);
-                        setShowSuggest(false);
-                        setTimeout(() => search(), 0);
-                      }}
-                      className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-brand-50"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-800">
-                          {s.fullName || <span className="text-slate-400">(chưa đặt tên)</span>}
-                        </div>
-                        <div className="truncate text-xs text-slate-500 tabular-nums">{formatPhone(s.local)}</div>
-                      </div>
-                      <span className="text-[10px] uppercase text-brand-600">chọn</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <button onClick={() => { setShowSuggest(false); search(); }} className="flex items-center gap-1 rounded-xl bg-brand-600 px-6 font-semibold text-white">
+        <div className="mt-1 flex gap-2">
+          <StaffPhoneAutocomplete
+            value={phone}
+            onChange={setPhone}
+            onSelect={() => setTimeout(() => search(), 0)}
+            onEnter={search}
+            placeholder="0905 xxx xxx"
+            containerClassName="flex-1"
+            className="w-full rounded-xl border-2 border-slate-200 p-3"
+          />
+          <button onClick={search} className="flex items-center gap-1 rounded-xl bg-brand-600 px-6 font-semibold text-white">
             <Search className="size-4" /> Tìm
           </button>
         </div>
-        {phone.replace(/\D/g, "").length >= 3 && suggestions.length === 0 && allPhones.length > 0 && (
-          <p className="mt-1 text-[11px] text-slate-400">Không có SĐT khớp tiền tố trong danh bạ. Vẫn có thể bấm Tìm để tra Auth.</p>
-        )}
       </div>
 
       {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -339,24 +257,30 @@ export default function CheckinAssistPage() {
           {tickets.memberships.length > 0 && (
             <Section title="Vé thời hạn" icon={<Calendar className="size-4 text-blue-600" />}>
               {tickets.memberships.map((m) => (
-                <TicketCard
-                  key={m.id}
-                  emoji="📅"
-                  title={`MS${m.memberCode} · ${m.holderName}`}
-                  subtitle={`Hết hạn ${formatDate(m.endDate)} · ${m.audience}`}
-                  action={
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() => checkinMembership(m)}
-                        disabled={busy === "mem-" + m.id}
-                        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                      >
-                        {busy === "mem-" + m.id ? "..." : "Điểm danh"}
-                      </button>
-                      <ExtensionPanel kind="MEMBERSHIP" serviceId={m.id} busy={busy === "extend-" + m.id} allowDays onExtend={extendTicket} />
+                <div key={m.id} className="rounded-xl border border-slate-100 bg-white p-3">
+                  <TicketCard
+                    emoji="📅"
+                    title={`MS${m.memberCode} · ${m.holderName}`}
+                    subtitle={`Hết hạn ${formatDate(m.endDate)} · ${m.audience}`}
+                    action={
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => checkinMembership(m)}
+                          disabled={busy === "mem-" + m.id}
+                          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          {busy === "mem-" + m.id ? "..." : "Điểm danh"}
+                        </button>
+                        <ExtensionPanel kind="MEMBERSHIP" serviceId={m.id} busy={busy === "extend-" + m.id} allowDays onExtend={extendTicket} />
+                      </div>
+                    }
+                  />
+                  {customer && (
+                    <div className="mt-3">
+                      <StaffPassPhoto customerId={customer.id} membership={m} compact onUpdated={search} />
                     </div>
-                  }
-                />
+                  )}
+                </div>
               ))}
             </Section>
           )}
@@ -376,7 +300,7 @@ export default function CheckinAssistPage() {
           )}
 
           {recentCheckins.length > 0 && (
-            <Section title="Sửa sai điểm danh vé lượt" icon={<Ticket className="size-4 text-red-600" />}>
+            <Section title="Hoàn lượt vừa trừ / sửa sai vé lượt" icon={<Ticket className="size-4 text-red-600" />}>
               {recentCheckins.map((c) => (
                 <CorrectionCard
                   key={c.id}
@@ -423,11 +347,6 @@ export default function CheckinAssistPage() {
       )}
     </div>
   );
-}
-
-function formatPhone(local: string): string {
-  if (/^0\d{9}$/.test(local)) return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`;
-  return local;
 }
 
 function timeMs(value: unknown): number {
@@ -642,7 +561,7 @@ function CorrectionCard({
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Lý do sửa sai (bắt buộc)"
+          placeholder="Lý do hoàn lượt (VD: khách không học/không xuống hồ)"
           disabled={left <= 0}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
         />
@@ -660,9 +579,21 @@ function CorrectionCard({
           disabled={disabled}
           className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          Hủy cả lần
+          Hoàn hết lượt này
         </button>
       </div>
+      {Boolean(checkin.corrections?.length) && (
+        <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
+          <div className="font-bold">Lịch sử hoàn lượt</div>
+          <div className="mt-1 space-y-1">
+            {checkin.corrections!.slice(-3).map((item, index) => (
+              <div key={`${checkin.id}-${index}`}>
+                {formatDate(item.at)} · hoàn {item.refundCount} lượt · còn {item.afterRemaining}. Lý do: {item.reason}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

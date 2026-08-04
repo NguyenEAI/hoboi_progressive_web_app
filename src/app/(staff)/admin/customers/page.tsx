@@ -12,6 +12,7 @@ import {
   resetCustomerPasswordToDefault,
 } from "@/lib/callable";
 import { useToast } from "@/components/Toast";
+import { StaffPhoneAutocomplete, normalizeLocalPhone } from "@/components/StaffPhoneAutocomplete";
 import { RefreshCw, Pencil, Trash2, UserPlus, X, Eye, KeyRound } from "lucide-react";
 import type { User } from "@/types";
 import { formatDate, toDate } from "@/lib/utils";
@@ -219,7 +220,7 @@ export default function CustomersPage() {
                       >
                         <Pencil className="size-4" />
                       </button>
-                      {isOwner && (
+                      {isStaff && (
                         <Link
                           href={`/admin/customers/${u.id}`}
                           title="Hồ sơ 360"
@@ -376,10 +377,10 @@ function CreateCustomerModal({
   return (
     <Modal title="Thêm khách hàng" onClose={onClose}>
       <label className="block text-sm font-medium">Số điện thoại *</label>
-      <input
+      <StaffPhoneAutocomplete
         value={phone}
-        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-        inputMode="numeric"
+        onChange={setPhone}
+        normalize={normalizeLocalPhone}
         autoFocus
         className="mt-1 w-full rounded-xl border-2 border-slate-200 p-3 tabular-nums"
         placeholder="0947010978"

@@ -175,6 +175,14 @@ export interface Membership {
   amountVND: number;
   status: MembershipStatus;
   passPhoto?: PassPhotoRef;
+  photoUpdateHistory?: {
+    at: TS;
+    by: string;
+    role?: string;
+    reason: string;
+    before?: PassPhotoRef | null;
+    after: PassPhotoRef;
+  }[];
   createdAt: TS;
 }
 
@@ -195,6 +203,17 @@ export interface TicketPackage {
   usageHistory: {
     at: TS;
     count: number; // số người check-in lần này
+    checkinId: string;
+  }[];
+  correctionHistory?: {
+    at: TS;
+    by: string;
+    role?: string;
+    mode: "PARTIAL" | "CANCEL";
+    reason: string;
+    refundCount: number;
+    beforeRemaining: number;
+    afterRemaining: number;
     checkinId: string;
   }[];
   startDate?: TS; // New packages: activation date. Legacy packages may derive from createdAt.

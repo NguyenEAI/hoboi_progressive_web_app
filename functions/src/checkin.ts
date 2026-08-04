@@ -507,6 +507,49 @@ function writeCheckin(
   });
 }
 
+export function computePackageCorrection(input: {
+  mode: "PARTIAL" | "CANCEL";
+  refundCount?: unknown;
+  originalCount: number;
+  alreadyRefunded: number;
+  remainingSessions: number;
+  totalSessions: number;
+}) {
+  const originalCount = Math.max(0, Math.floor(Number(input.originalCount)));
+  const alreadyRefunded = Math.max(0, Math.floor(Number(input.alreadyRefunded)));
+  const refundable = originalCount - alreadyRefunded;
+  if (refundable <= 0)
+    throw new HttpsError("failed-precondition", "Lần điểm danh này đã được hoàn hết");
+
+  let count: number;
+  if (input.mode === "CANCEL") {
+    count = refundable;
+  } else {
+    const requested = Number(input.refundCount ?? 0);
+    if (!Number.isInteger(requested) || requested < 1)
+      throw new HttpsError("invalid-argument", "Số lượt hoàn phải là số nguyên lớn hơn 0");
+    count = requested;
+  }
+  if (count > refundable)
+    throw new HttpsError("failed-precondition", `Chỉ còn ${refundable} lượt có thể hoàn cho lần này`);
+
+  const before = Math.max(0, Math.floor(Number(input.remainingSessions)));
+  const total = Math.max(0, Math.floor(Number(input.totalSessions)));
+  if (before + count > total)
+    throw new HttpsError("failed-precondition", "Số lượt hoàn sẽ vượt quá tổng lượt của thẻ");
+
+  const after = before + count;
+  return {
+    count,
+    after,
+    refundable,
+    correctionStatus:
+      after >= total || alreadyRefunded + count >= originalCount
+        ? "CANCELLED_OR_FULLY_REFUNDED"
+        : "PARTIALLY_REFUNDED",
+  } as const;
+}
+
 async function afterCheckin(r: CheckinResult) {
   if (!r.notify) return;
   const { uid, title, body, type } = r.notify;
@@ -639,15 +682,6 @@ export const correctPackageCheckin = onCall({ region: REGION }, async (req) => {
 
     const originalCount = Number(c.groupSize ?? 1);
     const alreadyRefunded = Number(c.refundedCount ?? 0);
-    const refundable = originalCount - alreadyRefunded;
-    if (refundable <= 0)
-      throw new HttpsError("failed-precondition", "Lần điểm danh này đã được hoàn hết");
-
-    const count = mode === "CANCEL" ? refundable : Math.max(1, Number(refundCount ?? 0));
-    if (!Number.isFinite(count) || count < 1)
-      throw new HttpsError("invalid-argument", "Số lượt hoàn phải lớn hơn 0");
-    if (count > refundable)
-      throw new HttpsError("failed-precondition", `Chỉ còn ${refundable} lượt có thể hoàn cho lần này`);
 
     const pkgRef = db().doc(`ticketPackages/${c.refId}`);
     const pkgSnap = await tx.get(pkgRef);
@@ -655,8 +689,17 @@ export const correctPackageCheckin = onCall({ region: REGION }, async (req) => {
     const p = pkgSnap.data()!;
     const before = Number(p.remainingSessions ?? 0);
     const total = Number(p.totalSessions ?? 0);
-    const after = Math.min(total, before + count);
-    const correctionStatus = after >= total || alreadyRefunded + count >= originalCount ? "CANCELLED_OR_FULLY_REFUNDED" : "PARTIALLY_REFUNDED";
+    const correctionPlan = computePackageCorrection({
+      mode,
+      refundCount,
+      originalCount,
+      alreadyRefunded,
+      remainingSessions: before,
+      totalSessions: total,
+    });
+    const count = correctionPlan.count;
+    const after = correctionPlan.after;
+    const correctionStatus = correctionPlan.correctionStatus;
     const correction = {
       at: admin.firestore.Timestamp.now(),
       by: req.auth!.uid,
@@ -689,6 +732,7 @@ export const correctPackageCheckin = onCall({ region: REGION }, async (req) => {
       action: mode === "CANCEL" ? "CHECKIN_CANCELLED" : "CHECKIN_PARTIALLY_REFUNDED",
       targetType: "checkin",
       targetId: checkinId,
+      description: mode === "CANCEL" ? "Hoàn toàn bộ lượt của lần check-in" : "Hoàn một phần lượt của lần check-in",
       detail: {
         packageId: c.refId,
         userId: c.userId,
@@ -708,7 +752,7 @@ export const correctPackageCheckin = onCall({ region: REGION }, async (req) => {
   try {
     await db().collection("users").doc(result.userId).collection("notifications").add({
       title: "Đã hoàn lại lượt bơi",
-      body: `Hồ bơi đã hoàn lại ${result.refundCount} lượt do thao tác sai. Hiện còn ${result.remaining} lượt.`,
+      body: `Hồ bơi đã hoàn lại ${result.refundCount} lượt. Hiện còn ${result.remaining} lượt.`,
       type: "GENERAL",
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
