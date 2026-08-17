@@ -23,5 +23,16 @@ service firebase.storage {
       allow read: if request.auth.token.role in ['OWNER','RECEPTIONIST'];
       allow write: if request.auth.token.role in ['OWNER','RECEPTIONIST'];
     }
+
+    // Ảnh hoá đơn chi tiêu của hồ (v2.6)
+    match /expenseReceipts/{uid}/{file=**} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.auth.uid == uid
+        && request.resource.size > 0
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update, delete: if false;
+    }
   }
 }

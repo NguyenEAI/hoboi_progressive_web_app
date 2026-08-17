@@ -1,5 +1,14 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-17
+
+- Thêm màn hình **Chi tiêu của hồ** cho Chủ + Lễ tân ở `/admin/expenses`. Form ghi khoản chi có: ngày, số tiền, loại chi (14 loại), ghi chú, hình thức trả (tiền mặt/CK/thẻ), người trả (Chủ/Lễ tân/Khác), ảnh hoá đơn không bắt buộc. Có xác nhận khi ghi số > 5.000.000₫.
+- Danh sách hôm nay, lọc theo khoảng ngày + đa loại chi. Bảng tổng tháng có tổng chung, so với tháng trước và phân tích theo từng loại (%).
+- Chi cố định hằng tháng (Chủ quản lý qua `expenseTemplates`): mỗi đầu tháng nếu template chưa được ghi, app hiện chip nhắc "Chưa ghi X — Ghi ngay" để điền sẵn.
+- Callable mới trong Cloud Functions: `createExpense`, `updateExpense`, `deleteExpense`, `upsertExpenseTemplate`, `deleteExpenseTemplate`. Chủ sửa/xoá tất cả; Lễ tân chỉ sửa/xoá khoản mình ghi trong vòng 24 giờ. Mọi thao tác ghi audit log kèm mô tả tiếng Việt (`EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_DELETED`, `EXPENSE_TEMPLATE_*`).
+- Firestore rules: `expenses` + `expenseTemplates` chỉ Chủ/Lễ tân đọc, ghi qua callable. Storage rules: `expenseReceipts/{uid}/**` giới hạn ảnh JPG/PNG/WebP ≤ 5MB, chỉ Chủ/Lễ tân xem.
+- Có unit test cho validate + phân quyền sửa/xoá (`functions/src/expenses.test.ts`).
+
 ## 2026-08-05
 
 - Sửa lỗi autocomplete SĐT ở các màn quầy: khi bấm gợi ý, handler tìm kiếm nhận trực tiếp số đã chọn đầy đủ thay vì chờ React state cập nhật, tránh trường hợp chỉ tìm bằng tiền tố như `093`.

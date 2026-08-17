@@ -240,3 +240,45 @@ export const sendPromotion = call<
   { title: string; body: string; audience: "TEST_PHONE" | "ALL" | "PACKAGE" | "PASS" | "PARENTS" | "COURSE"; testPhone?: string },
   { ok: boolean; notified: number; promotionId: string }
 >("sendPromotion");
+
+// Chi tiêu của hồ (v2.6)
+export const createExpense = call<
+  {
+    date: string;
+    amount: number | string;
+    category: string;
+    note?: string;
+    paymentMethod: "CASH" | "TRANSFER" | "CARD";
+    paidBy: "OWNER" | "RECEPTIONIST" | "OTHER";
+    paidByName?: string;
+    receiptPhoto?: { storagePath: string; contentType?: string; sizeBytes?: number } | null;
+  },
+  { ok: boolean; id: string }
+>("createExpense");
+
+export const updateExpense = call<
+  {
+    id: string;
+    date: string;
+    amount: number | string;
+    category: string;
+    note?: string;
+    paymentMethod: "CASH" | "TRANSFER" | "CARD";
+    paidBy: "OWNER" | "RECEPTIONIST" | "OTHER";
+    paidByName?: string;
+    receiptPhoto?: { storagePath: string; contentType?: string; sizeBytes?: number } | null;
+  },
+  { ok: boolean }
+>("updateExpense");
+
+export const deleteExpense = call<
+  { id: string; reason: string },
+  { ok: boolean }
+>("deleteExpense");
+
+export const upsertExpenseTemplate = call<
+  { id?: string; name: string; category: string; typicalAmount?: number; note?: string; active?: boolean },
+  { ok: boolean; id: string }
+>("upsertExpenseTemplate");
+
+export const deleteExpenseTemplate = call<{ id: string }, { ok: boolean }>("deleteExpenseTemplate");

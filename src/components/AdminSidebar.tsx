@@ -25,6 +25,7 @@ const GROUPS: { title: string; items: { href: string; label: string; ownerOnly?:
   ]},
   { title: "Phân tích", items: [
     { href: "/admin/reports", label: "📊 Báo cáo" },
+    { href: "/admin/expenses", label: "💸 Chi tiêu" },
   ]},
 ];
 

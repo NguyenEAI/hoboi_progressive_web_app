@@ -419,3 +419,73 @@ export interface AuditLog {
   detail?: Record<string, unknown>;
   at: TS;
 }
+
+// ---------- EXPENSES (Chi tiêu của hồ) ----------
+export type ExpenseCategory =
+  | "ELECTRICITY"
+  | "WATER"
+  | "CHEMICALS"
+  | "STAFF_SALARY"
+  | "COACH_SALARY"
+  | "SUPPLIES"
+  | "MAINTENANCE"
+  | "CLEANING"
+  | "MARKETING"
+  | "RENT"
+  | "TELECOM"
+  | "TAX"
+  | "HOSPITALITY"
+  | "OTHER";
+
+export type ExpensePaymentMethod = "CASH" | "TRANSFER" | "CARD";
+export type ExpensePaidBy = "OWNER" | "RECEPTIONIST" | "OTHER";
+
+export interface ExpenseReceiptPhoto {
+  storagePath: string;
+  contentType?: string;
+  sizeBytes?: number;
+}
+
+export interface ExpenseHistoryEntry {
+  at: TS;
+  by: string;
+  byName?: string;
+  action: "CREATE" | "UPDATE" | "DELETE";
+  reason?: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+}
+
+export interface Expense {
+  id: string;
+  at: TS; // ngày chi
+  amount: number;
+  category: ExpenseCategory;
+  note?: string;
+  paymentMethod: ExpensePaymentMethod;
+  paidBy: ExpensePaidBy;
+  paidByName?: string;
+  receiptPhoto?: ExpenseReceiptPhoto | null;
+  createdBy: string;
+  createdByRole: "OWNER" | "RECEPTIONIST";
+  createdByName?: string;
+  createdAt: TS;
+  updatedAt?: TS;
+  updatedBy?: string;
+  deletedAt?: TS | null;
+  deletedBy?: string | null;
+  deleteReason?: string | null;
+  history?: ExpenseHistoryEntry[];
+}
+
+export interface ExpenseTemplate {
+  id: string;
+  name: string;
+  category: ExpenseCategory;
+  typicalAmount?: number;
+  note?: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: TS;
+  updatedAt?: TS;
+}
