@@ -123,8 +123,8 @@ export default function StaffPage() {
 
       {msg && <div className="mt-4 rounded-xl bg-slate-100 p-3 text-sm">{msg}</div>}
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-100 bg-white">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-brand-50 text-left text-xs uppercase text-brand-700">
             <tr><th className="p-3">Họ tên</th><th className="p-3">SĐT</th><th className="p-3">Vai trò</th><th className="p-3">Thao tác</th></tr>
           </thead>

@@ -1,5 +1,11 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-17 (chiều)
+
+- Khu quản trị dễ dùng hơn trên điện thoại: thanh menu bên trái tự ẩn trên màn nhỏ, có nút ☰ ở đầu trang để mở/đóng (nền mờ chạm ngoài để đóng, tự đóng khi chuyển trang).
+- Các bảng (khách hàng, HLV, nhân viên, sản phẩm, đơn hàng) được bọc cuộn ngang trong khung riêng để không đẩy tràn cả trang trên điện thoại.
+- Bớt lề nội dung khu quản trị trên màn nhỏ để tận dụng không gian.
+
 ## 2026-08-17
 
 - Thêm màn hình **Chi tiêu của hồ** cho Chủ + Lễ tân ở `/admin/expenses`. Form ghi khoản chi có: ngày, số tiền, loại chi (14 loại), ghi chú, hình thức trả (tiền mặt/CK/thẻ), người trả (Chủ/Lễ tân/Khác), ảnh hoá đơn không bắt buộc. Có xác nhận khi ghi số > 5.000.000₫.

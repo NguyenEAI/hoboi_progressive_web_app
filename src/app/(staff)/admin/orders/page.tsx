@@ -182,7 +182,8 @@ export default function OrdersPage() {
                 <div className="text-xs text-slate-500">{items.length} đơn · {formatVND(items.filter((o) => o.status === "PAID").reduce((s, o) => s + (o.amountVND ?? 0), 0))} đã thu</div>
               </div>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="text-left text-xs uppercase text-slate-500">
                 <tr><th className="px-4 py-2">Giờ</th><th className="px-4 py-2">Mã</th><th className="px-4 py-2">Khách</th><th className="px-4 py-2">Sản phẩm</th><th className="px-4 py-2">Số tiền</th><th className="px-4 py-2">Trạng thái</th><th className="px-4 py-2">Thao tác</th></tr>
               </thead>
@@ -214,6 +215,7 @@ export default function OrdersPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
         ))}
         {!grouped.length && <p className="rounded-2xl bg-white p-8 text-center text-slate-400">Không có đơn nào trong kỳ này</p>}

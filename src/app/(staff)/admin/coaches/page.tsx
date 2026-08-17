@@ -114,8 +114,8 @@ export default function CoachesPage() {
         </div>
       )}
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-100 bg-white">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-brand-50 text-left text-xs uppercase text-brand-700">
             <tr><th className="p-3">HLV</th><th className="p-3">SĐT</th><th className="p-3">Lịch dạy</th><th className="p-3">Số ca/tuần</th><th className="p-3">Trạng thái</th><th className="p-3">Thao tác</th></tr>
           </thead>

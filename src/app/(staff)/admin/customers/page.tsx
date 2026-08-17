@@ -165,8 +165,8 @@ export default function CustomersPage() {
         className="mt-4 w-full rounded-xl border-2 border-slate-200 p-3"
       />
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-100 bg-white">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-brand-50 text-left text-xs uppercase text-brand-700">
             <tr>
               <th className="p-3">Khách hàng</th>

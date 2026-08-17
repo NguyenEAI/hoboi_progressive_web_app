@@ -64,7 +64,8 @@ export default function ProductsPage() {
       {msg && <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{msg}</div>}
 
       <Section title="Vé thời hạn (không giới hạn lượt)">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-brand-50 text-left text-xs uppercase text-brand-700">
             <tr><th className="p-3">Đối tượng</th>{PASS_DURATIONS.map((d) => <th key={d.id} className="p-3">{d.label}</th>)}</tr>
           </thead>
@@ -82,10 +83,12 @@ export default function ProductsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Section>
 
       <Section title="Gói lượt (trừ 1 lượt / lần)">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-brand-50 text-left text-xs uppercase text-brand-700">
             <tr><th className="p-3">Đối tượng</th>{PACKAGE_SIZES.map((s) => <th key={s.id} className="p-3">{s.label}</th>)}<th className="p-3">Ai được dùng</th></tr>
           </thead>
@@ -108,6 +111,7 @@ export default function ProductsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Section>
 
       <Section title="Khóa học bơi (15 buổi · 90 ngày · giá phẳng cho 4 kiểu)">
