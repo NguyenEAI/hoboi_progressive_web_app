@@ -100,6 +100,51 @@ export const setCoachActive = onCall({ region: REGION }, async (req) => {
   return { ok: true };
 });
 
+// Xoá hẳn HLV (Owner). Chặn nếu HLV còn enrollments ACTIVE — buộc chuyển/hoàn lớp trước.
+// Xoá cả sub-collection slots. Nếu HLV đã liên kết user thì gỡ userId khỏi user doc.
+export const deleteCoach = onCall({ region: REGION }, async (req) => {
+  const ownerUid = requireOwner(req);
+  const { id, reason } = req.data as { id: string; reason?: string };
+  if (!id) throw new HttpsError("invalid-argument", "Thiếu id HLV");
+
+  const coachRef = db().doc(`coaches/${id}`);
+  const snap = await coachRef.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Không tìm thấy HLV");
+  const coach = snap.data()!;
+
+  const active = await db().collection("enrollments")
+    .where("coachId", "==", id).where("status", "==", "ACTIVE").limit(1).get();
+  if (!active.empty) {
+    throw new HttpsError(
+      "failed-precondition",
+      `HLV này còn khoá học đang chạy. Hãy chuyển học viên sang HLV khác hoặc hoàn khoá trước, rồi xoá.`,
+    );
+  }
+
+  // Xoá slots của HLV (nếu có)
+  const slots = await coachRef.collection("slots").get();
+  const batch = db().batch();
+  slots.forEach((d) => batch.delete(d.ref));
+  batch.delete(coachRef);
+  await batch.commit();
+
+  // Gỡ liên kết trên user doc nếu có
+  if (coach.userId) {
+    await db().doc(`users/${coach.userId}`).set({ coachId: null }, { merge: true }).catch(() => undefined);
+  }
+
+  await db().collection("auditLogs").add({
+    actorId: ownerUid,
+    action: "DELETE_COACH",
+    targetType: "coach",
+    targetId: id,
+    description: `Owner xoá HLV ${coach.fullName || id}${reason ? ` — lý do: ${reason}` : ""}`,
+    detail: { fullName: coach.fullName ?? null, phone: coach.phone ?? null, reason: reason ?? null },
+    at: admin.firestore.Timestamp.now(),
+  });
+  return { ok: true };
+});
+
 async function seedSlotsFor(coachId: string, weekday: number) {
   for (const h of START_HOURS) {
     const id = `${coachId}_${weekday}_${h}`;

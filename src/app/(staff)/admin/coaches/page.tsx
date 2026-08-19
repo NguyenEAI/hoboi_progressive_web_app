@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { upsertCoach, setCoachActive } from "@/lib/callable";
+import { upsertCoach, setCoachActive, deleteCoach } from "@/lib/callable";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 import type { Coach, Weekday } from "@/types";
 import { WEEKDAY_LABELS, SLOT_START_HOURS } from "@/lib/constants";
@@ -54,6 +54,18 @@ export default function CoachesPage() {
     try {
       await setCoachActive({ id: c.id, active: !c.active });
       setMsg(`✅ Đã ${action} ${c.fullName}.`);
+    } catch (e) { setMsg("❌ " + (e as Error).message); }
+  }
+  async function removeCoach(c: Coach) {
+    const reason = window.prompt(
+      `Xoá HẲN HLV "${c.fullName}"?\n\nLịch dạy và các ca trống sẽ bị xoá. Nếu HLV còn khoá học đang chạy sẽ không xoá được.\n\nNhập lý do xoá (bắt buộc):`,
+      "",
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) { setMsg("❌ Vui lòng nhập lý do xoá (tối thiểu 3 ký tự)."); return; }
+    try {
+      await deleteCoach({ id: c.id, reason: reason.trim() });
+      setMsg(`✅ Đã xoá HLV ${c.fullName}.`);
     } catch (e) { setMsg("❌ " + (e as Error).message); }
   }
 
@@ -133,10 +145,13 @@ export default function CoachesPage() {
                 <td className="p-3">{c.active
                   ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">● Hoạt động</span>
                   : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Đã khóa</span>}</td>
-                <td className="p-3 space-x-1">
+                <td className="p-3 space-x-1 space-y-1">
                   <button onClick={() => editCoach(c)} className="rounded-lg border-2 border-brand-200 px-3 py-1 text-xs text-brand-700">Sửa</button>
-                  <button onClick={() => toggleActive(c)} className={`rounded-lg border-2 px-3 py-1 text-xs ${c.active ? "border-red-200 text-red-600" : "border-green-200 text-green-700"}`}>
+                  <button onClick={() => toggleActive(c)} className={`rounded-lg border-2 px-3 py-1 text-xs ${c.active ? "border-amber-200 text-amber-700" : "border-green-200 text-green-700"}`}>
                     {c.active ? "Khoá" : "Mở khoá"}
+                  </button>
+                  <button onClick={() => removeCoach(c)} className="rounded-lg border-2 border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50">
+                    Xoá
                   </button>
                 </td>
               </tr>

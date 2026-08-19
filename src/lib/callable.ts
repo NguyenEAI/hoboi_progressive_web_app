@@ -188,6 +188,7 @@ export const upsertCoach = call<
   { ok: boolean; id: string }
 >("upsertCoach");
 export const setCoachActive = call<{ id: string; active: boolean }, { ok: boolean }>("setCoachActive");
+export const deleteCoach = call<{ id: string; reason?: string }, { ok: boolean }>("deleteCoach");
 export const deleteOrder = call<{ orderId: string; reason?: string }, { ok: boolean }>("deleteOrder");
 
 // v2.3 (D5, INV-15) — Vé lượt: lễ tân duyệt check-in

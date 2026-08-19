@@ -26,7 +26,7 @@ export {
   resetCustomerPasswordToDefault,
 } from "./staff";
 export { ownerUpdateCustomerProfile, ownerUpdateCustomerService, updateMembershipPassPhoto } from "./customerAdmin";
-export { updatePricing, upsertCoach, setCoachActive, deleteOrder, sendPromotion } from "./admin";
+export { updatePricing, upsertCoach, setCoachActive, deleteCoach, deleteOrder, sendPromotion } from "./admin";
 export { createExpense, updateExpense, deleteExpense, upsertExpenseTemplate, deleteExpenseTemplate } from "./expenses";
 // v2.4 (E4) — màn HLV: ghi chú HV + báo nghỉ ca
 export { addCoachNote, reportCoachAbsence } from "./coach";

@@ -1,5 +1,10 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-19 (chiều muộn)
+
+- Thêm chức năng **Xoá HLV**: callable `deleteCoach` (Owner-only) xoá HLV + sub-collection slots + gỡ liên kết user. Chặn cứng nếu HLV còn `enrollments` status `ACTIVE`. Yêu cầu lý do xoá ≥3 ký tự trong UI. Có audit log `DELETE_COACH`.
+- Thêm **Thanh tìm kiếm chức năng** trên đầu khu quản trị (`CommandPalette`): gõ tên chức năng (VD "gia hạn", "chi tiêu", "hoàn buổi", "xoá HLV"...) → hiển thị gợi ý → chọn để nhảy vào màn tương ứng. Hỗ trợ tiếng Việt không dấu, phím tắt Ctrl+K/Cmd+K, ↑↓/Enter/Esc. Chỉ hiện với Owner + Lễ tân; các mục Owner-only tự ẩn với Lễ tân.
+
 ## 2026-08-19 (chiều)
 
 - Sửa lỗi gán quyền: trước đây khách đã có trong danh sách nhưng chưa từng đăng nhập app thì báo "Không tìm thấy tài khoản". Giờ callable `setUserRole` fallback tra Firestore `users` bằng SĐT (3 biến thể), tự tạo tài khoản đăng nhập với mật khẩu mặc định `123456` nếu chưa có, giữ nguyên `uid` để không mất liên kết dữ liệu. Chủ chỉ cần khách xuất hiện trong mục Khách hàng là gán quyền được ngay.
