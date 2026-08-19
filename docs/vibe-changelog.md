@@ -1,5 +1,9 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-19
+
+- Tăng tốc app cho khách: bật **bộ nhớ tạm nội bộ** (IndexedDB, đa tab) cho toàn bộ truy vấn dữ liệu. Lần đầu vẫn tải qua mạng; các lần mở lại trang (vé, khoá học, hồ sơ...) hiển thị gần như tức thì rồi đồng bộ ngầm với server. Giảm cảm giác chờ 1-3 giây xuống ~0.1 giây. Nếu trình duyệt không hỗ trợ (Safari private mode) sẽ tự rơi về chế độ cũ, không lỗi.
+
 ## 2026-08-17 (chiều)
 
 - Khu quản trị dễ dùng hơn trên điện thoại: thanh menu bên trái tự ẩn trên màn nhỏ, có nút ☰ ở đầu trang để mở/đóng (nền mờ chạm ngoài để đóng, tự đóng khi chuyển trang).
