@@ -1,5 +1,10 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-19 (chiều)
+
+- Sửa lỗi gán quyền: trước đây khách đã có trong danh sách nhưng chưa từng đăng nhập app thì báo "Không tìm thấy tài khoản". Giờ callable `setUserRole` fallback tra Firestore `users` bằng SĐT (3 biến thể), tự tạo tài khoản đăng nhập với mật khẩu mặc định `123456` nếu chưa có, giữ nguyên `uid` để không mất liên kết dữ liệu. Chủ chỉ cần khách xuất hiện trong mục Khách hàng là gán quyền được ngay.
+- Cập nhật chỉ dẫn ở màn Nhân viên & Phân quyền cho khớp thực tế.
+
 ## 2026-08-19
 
 - Tăng tốc app cho khách: bật **bộ nhớ tạm nội bộ** (IndexedDB, đa tab) cho toàn bộ truy vấn dữ liệu. Lần đầu vẫn tải qua mạng; các lần mở lại trang (vé, khoá học, hồ sơ...) hiển thị gần như tức thì rồi đồng bộ ngầm với server. Giảm cảm giác chờ 1-3 giây xuống ~0.1 giây. Nếu trình duyệt không hỗ trợ (Safari private mode) sẽ tự rơi về chế độ cũ, không lỗi.

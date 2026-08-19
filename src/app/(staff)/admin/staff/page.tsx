@@ -78,7 +78,7 @@ export default function StaffPage() {
       {open && (
         <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50 p-4">
           <h3 className="font-semibold text-brand-800">Gán vai trò cho tài khoản</h3>
-          <p className="text-xs text-slate-600">Người được gán <b>phải đăng nhập app ít nhất 1 lần</b> trước khi gán.</p>
+          <p className="text-xs text-slate-600">Người được gán chỉ cần <b>đã có trong danh sách Khách hàng</b>. Nếu chưa có, vào mục Khách hàng tạo trước rồi quay lại đây gán quyền.</p>
           <div className="mt-3 space-y-2">
             <div>
               <label className="text-xs font-medium">Số điện thoại</label>

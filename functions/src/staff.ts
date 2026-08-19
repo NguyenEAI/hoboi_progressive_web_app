@@ -2,6 +2,35 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { DEFAULT_CUSTOMER_PASSWORD, normalizeVNPhone, phoneLoginEmail, phoneVariants, requireOwner, requireStaff } from "./helpers";
 
+// Đảm bảo phone/email/password đầy đủ trên Auth user. Dùng cho gán quyền / reset mật khẩu.
+// Nếu Auth chưa có user với uid đó → tạo mới với uid đúng để giữ liên kết Firestore.
+// Nếu đã có → cập nhật phone/email/password còn thiếu.
+async function ensureAuthAccount(uid: string, e164: string, fullName?: string): Promise<admin.auth.UserRecord> {
+  const email = phoneLoginEmail(e164);
+  try {
+    const cur = await admin.auth().getUser(uid);
+    const update: admin.auth.UpdateRequest = {};
+    if (!cur.phoneNumber) update.phoneNumber = e164;
+    if (!cur.email) { update.email = email; update.emailVerified = true; }
+    // Không đặt lại mật khẩu nếu đã có (tránh làm hỏng đăng nhập hiện tại).
+    if (Object.keys(update).length > 0) {
+      await admin.auth().updateUser(uid, update);
+    }
+    return cur;
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code !== "auth/user-not-found") throw e;
+    // Chưa có Auth → tạo với đúng uid để khớp Firestore
+    return await admin.auth().createUser({
+      uid,
+      phoneNumber: e164,
+      email,
+      emailVerified: true,
+      password: DEFAULT_CUSTOMER_PASSWORD,
+      displayName: fullName || undefined,
+    });
+  }
+}
+
 const REGION = "asia-southeast1";
 const db = () => admin.firestore();
 
@@ -23,15 +52,39 @@ export const setUserRole = onCall({ region: REGION }, async (req) => {
   if (!phone || !ROLES.includes(role))
     throw new HttpsError("invalid-argument", "Thiếu SĐT hoặc vai trò không hợp lệ");
 
-  // Chuẩn hóa SĐT về E.164 (+84...). Firebase getUserByPhoneNumber yêu cầu E.164.
-  const e164 = normalizeVNPhone(phone);
-  if (!e164) throw new HttpsError("invalid-argument", `SĐT không hợp lệ: ${phone}`);
+  const variants = phoneVariants(phone);
+  if (!variants) throw new HttpsError("invalid-argument", `SĐT không hợp lệ: ${phone}`);
+  const e164 = variants.e164;
 
-  const user = await admin.auth().getUserByPhoneNumber(e164).catch(() => null);
-  if (!user) throw new HttpsError("not-found", `Không tìm thấy tài khoản với SĐT ${e164}. Người đó phải đăng nhập app 1 lần trước.`);
+  // 1) Ưu tiên tra Auth (khách đã login app).
+  let user = await admin.auth().getUserByPhoneNumber(e164).catch(() => null);
+  let fullName: string | undefined;
+  let firestoreUid: string | undefined;
+
+  // 2) Nếu Auth chưa có, tra Firestore (khách do nhân viên tạo trước đó ở màn Khách hàng).
+  if (!user) {
+    const q = await db()
+      .collection("users")
+      .where("phone", "in", [variants.raw, variants.local, variants.e164])
+      .limit(1)
+      .get();
+    if (!q.empty) {
+      firestoreUid = q.docs[0].id;
+      fullName = String(q.docs[0].data()?.fullName ?? "") || undefined;
+      // Đảm bảo Auth khớp uid này (tạo mới nếu chưa có, hoặc bổ sung phone/email nếu thiếu).
+      user = await ensureAuthAccount(firestoreUid, e164, fullName);
+    }
+  }
+
+  if (!user) {
+    throw new HttpsError(
+      "not-found",
+      `Không tìm thấy khách hàng với SĐT ${e164}. Hãy vào mục Khách hàng để tạo trước, sau đó quay lại gán quyền.`,
+    );
+  }
 
   await admin.auth().setCustomUserClaims(user.uid, { role });
-  await db().doc(`users/${user.uid}`).set({ role }, { merge: true });
+  await db().doc(`users/${user.uid}`).set({ role, phone: e164, ...(fullName ? { fullName } : {}) }, { merge: true });
 
   if (role === "COACH" && coachId) {
     await db().doc(`coaches/${coachId}`).set({ userId: user.uid }, { merge: true });
