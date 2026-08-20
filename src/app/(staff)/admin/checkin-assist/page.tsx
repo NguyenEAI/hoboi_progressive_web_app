@@ -338,6 +338,9 @@ export default function CheckinAssistPage() {
                 <CorrectionCard
                   key={c.id}
                   checkin={c}
+                  pkg={tickets.packages.find((p) => p.id === c.refId)}
+                  customerName={customer?.fullName}
+                  childName={children.find((k) => k.id === c.beneficiaryId)?.fullName}
                   busy={busy === "correct-" + c.id}
                   onCorrect={(mode, count, reason) => correctCheckin(c.id, mode, count, reason)}
                 />
@@ -790,10 +793,16 @@ function InfoLine({ label, value }: { label: string; value: string }) {
 
 function CorrectionCard({
   checkin,
+  pkg,
+  customerName,
+  childName,
   busy,
   onCorrect,
 }: {
   checkin: CheckIn;
+  pkg?: TicketPackage;
+  customerName?: string;
+  childName?: string;
   busy: boolean;
   onCorrect: (mode: "PARTIAL" | "CANCEL", count: number, reason: string) => void;
 }) {
@@ -804,12 +813,32 @@ function CorrectionCard({
   const [reason, setReason] = useState("");
   const disabled = busy || left <= 0 || !reason.trim();
 
+  const audLabel = pkg?.audience === "ADULT" ? "Người lớn" : pkg?.audience === "CHILD_UNDER_140" ? "Trẻ <1.4m" : pkg?.audience === "CHILD_OVER_140" ? "Trẻ ≥1.4m" : "";
+  const cardOwner = childName ? `Thẻ của ${childName} (con)` : customerName ? `Thẻ của ${customerName}` : "Thẻ vé lượt";
+  const total = pkg?.totalSessions ?? "?";
+  const remaining = pkg?.remainingSessions ?? "?";
+  const memberCode = pkg?.memberCode ? `MS${pkg.memberCode}` : "";
+
   return (
     <div className="rounded-xl border border-red-100 bg-white p-3">
+      {/* Info thẻ cụ thể - để không nhầm giữa nhiều thẻ */}
+      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+        <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
+          <span className="text-lg">🎟️</span>
+          <span className="truncate">{cardOwner}</span>
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-amber-800">
+          {audLabel && <span>{audLabel}</span>}
+          {memberCode && <span>{memberCode}</span>}
+          <span>Tổng: <b>{total}</b> lượt</span>
+          <span>Còn: <b>{remaining}</b> lượt</span>
+        </div>
+      </div>
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium text-slate-900">
-            Đã trừ {original} lượt · còn có thể hoàn {left} lượt
+            Lần này đã trừ {original} lượt · còn có thể hoàn {left} lượt
           </div>
           <div className="mt-1 text-xs text-slate-500">
             {formatDate(checkin.at)} · {checkin.correctionStatus === "CANCELLED_OR_FULLY_REFUNDED" ? "Đã hoàn/hủy hết" : checkin.correctionStatus === "PARTIALLY_REFUNDED" ? "Đã hoàn một phần" : "Chưa sửa"}

@@ -1,5 +1,11 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-20
+
+- **Thông báo huỷ vé/khoá cho khách**: `refundOrder` (Owner-only, khi Chủ huỷ đơn đã thanh toán) giờ trả về danh sách dịch vụ bị treo, gọi `notifyServiceCancellation` để ghi notification cho từng khách trong `users/{uid}/notifications` (type `SERVICE_CANCELLED`) kèm tên dịch vụ + lý do. Khách nhìn thấy trong mục Thông báo trên app.
+- **Pop-up realtime khi khách quét cổng**: component `LiveCheckinToast` gắn trong `AdminLayout`, subscribe `checkins` (result=ACCEPTED, at ≥ lúc mở app) → mỗi khi có check-in mới, hiện toast góc phải với tên khách, thẻ, số lượt còn (hoặc hạn với vé thời hạn / tiến độ với khoá học). Tự đóng sau 6 giây, tối đa 4 toast xếp chồng.
+- **Rõ ràng thẻ nào đang hoàn**: card "Hoàn lượt vừa trừ" thêm header hiện: chủ thẻ (khách / con của khách), đối tượng, mã MS, tổng lượt và lượt còn lại. Không còn nhầm khi 1 khách có nhiều thẻ.
+
 ## 2026-08-19 (chiều muộn)
 
 - Thêm chức năng **Xoá HLV**: callable `deleteCoach` (Owner-only) xoá HLV + sub-collection slots + gỡ liên kết user. Chặn cứng nếu HLV còn `enrollments` status `ACTIVE`. Yêu cầu lý do xoá ≥3 ký tự trong UI. Có audit log `DELETE_COACH`.

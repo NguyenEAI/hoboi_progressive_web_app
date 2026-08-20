@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { BackButton } from "@/components/BackButton";
 import { CommandPalette } from "@/components/CommandPalette";
+import { LiveCheckinToast } from "@/components/LiveCheckinToast";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -35,6 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex min-h-screen items-start">
+      <LiveCheckinToast />
       <AdminSidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
       <main className="min-w-0 flex-1 bg-slate-50">
         <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200/70 bg-white/90 px-3 py-2 backdrop-blur lg:hidden">

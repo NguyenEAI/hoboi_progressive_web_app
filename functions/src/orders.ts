@@ -588,7 +588,8 @@ export const refundOrder = onCall({ region: REGION }, async (req) => {
     });
   });
   // Khóa thẻ liên quan (ngoài transaction cho đơn giản)
-  await suspendServiceByOrder(orderId);
+  const affected = await suspendServiceByOrder(orderId);
+  await notifyServiceCancellation(affected, String(reason), "REFUND");
   return { ok: true };
 });
 
@@ -626,12 +627,61 @@ function pickNextSlot(weekdays: number[], startHour: number, weekOffset: number)
   return { startDate: chosen, weekday: chosenWd };
 }
 
-async function suspendServiceByOrder(orderId: string) {
-  for (const [col, status] of [["memberships", "SUSPENDED"], ["ticketPackages", "SUSPENDED"], ["enrollments", "CANCELLED"]] as const) {
+async function suspendServiceByOrder(orderId: string): Promise<Array<{ userId: string; kind: string; name: string }>> {
+  const affected: Array<{ userId: string; kind: string; name: string }> = [];
+  for (const [col, status, kindLabel] of [
+    ["memberships", "SUSPENDED", "Vé thời hạn"],
+    ["ticketPackages", "SUSPENDED", "Vé lượt"],
+    ["enrollments", "CANCELLED", "Khoá học bơi"],
+  ] as const) {
     const q = await db().collection(col).where("orderId", "==", orderId).get();
+    if (q.empty) continue;
     const batch = db().batch();
-    q.forEach((doc) => batch.update(doc.ref, { status }));
-    if (!q.empty) await batch.commit();
+    q.forEach((doc) => {
+      batch.update(doc.ref, { status });
+      const d = doc.data() as Record<string, unknown>;
+      const uid = (d.userId as string) || (d.parentId as string) || (d.studentId as string);
+      if (!uid) return;
+      const nameGuess = (d.beneficiaryName as string) || (d.studentName as string)
+        || (col === "ticketPackages" && d.memberCode ? `MS${d.memberCode}` : "")
+        || (col === "memberships" && d.memberCode ? `MS${d.memberCode}` : "")
+        || kindLabel;
+      affected.push({ userId: uid, kind: kindLabel, name: nameGuess });
+    });
+    await batch.commit();
+  }
+  return affected;
+}
+
+// Ghi thông báo cho khách khi vé/khoá bị huỷ.
+async function notifyServiceCancellation(
+  targets: Array<{ userId: string; kind: string; name: string }>,
+  reason: string,
+  action: "REFUND" | "CANCEL",
+) {
+  const now = admin.firestore.Timestamp.now();
+  const seen = new Set<string>();
+  for (const t of targets) {
+    const key = `${t.userId}|${t.kind}|${t.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const title = action === "REFUND"
+      ? `Đã huỷ ${t.kind} của bạn`
+      : `Đã huỷ đơn ${t.kind}`;
+    const body = action === "REFUND"
+      ? `Hồ bơi đã huỷ ${t.kind} "${t.name}" và hoàn tiền cho bạn. Lý do: ${reason}. Liên hệ hồ nếu có thắc mắc.`
+      : `Đơn ${t.kind} "${t.name}" đã bị huỷ. ${reason ? `Lý do: ${reason}.` : ""}`;
+    try {
+      await db().collection("users").doc(t.userId).collection("notifications").add({
+        title,
+        body,
+        type: "SERVICE_CANCELLED",
+        read: false,
+        createdAt: now,
+      });
+    } catch (e) {
+      console.warn("notifyServiceCancellation failed", t, e);
+    }
   }
 }
 
