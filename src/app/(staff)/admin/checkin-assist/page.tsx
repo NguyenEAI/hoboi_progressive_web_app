@@ -289,12 +289,18 @@ export default function CheckinAssistPage() {
           {/* Vé thời hạn */}
           {tickets.memberships.length > 0 && (
             <Section title="Vé thời hạn" icon={<Calendar className="size-4 text-blue-600" />}>
-              {tickets.memberships.map((m) => (
+              {tickets.memberships.map((m) => {
+                const ownerInfo = holderLabel(m.holderKind, m.holderId, m.holderName, customer, children);
+                return (
                 <div key={m.id} className="rounded-xl border border-slate-100 bg-white p-3">
+                  <div className={`mb-2 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-bold ${ownerInfo.tone}`}>
+                    <span className="text-base">{ownerInfo.emoji}</span>
+                    <span className="truncate">{ownerInfo.label}</span>
+                  </div>
                   <TicketCard
                     emoji="📅"
-                    title={`MS${m.memberCode} · ${m.holderName}`}
-                    subtitle={`Hết hạn ${formatDate(m.endDate)} · ${m.audience}`}
+                    title={`MS${m.memberCode}`}
+                    subtitle={`Hết hạn ${formatDate(m.endDate)} · ${audienceLabel(m.audience)}`}
                     action={
                       <div className="flex flex-col gap-2">
                         <button
@@ -314,7 +320,8 @@ export default function CheckinAssistPage() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </Section>
           )}
 
@@ -325,6 +332,7 @@ export default function CheckinAssistPage() {
                 <PackageCheckin
                   key={p.id}
                   pkg={p}
+                  ownerInfo={holderLabel(p.holderKind, p.holderId, p.holderName, customer, children)}
                   busy={busy === "pkg-" + p.id}
                   onCheckin={(count, reason) => checkinPackage(p, count, reason)}
                 />
@@ -334,17 +342,20 @@ export default function CheckinAssistPage() {
 
           {recentCheckins.filter((c) => c.kind === "PACKAGE").length > 0 && (
             <Section title="Hoàn lượt vừa trừ / sửa sai vé lượt" icon={<Ticket className="size-4 text-red-600" />}>
-              {recentCheckins.filter((c) => c.kind === "PACKAGE").map((c) => (
+              {recentCheckins.filter((c) => c.kind === "PACKAGE").map((c) => {
+                const pkg = tickets.packages.find((p) => p.id === c.refId);
+                const owner = holderLabel(pkg?.holderKind, pkg?.holderId, pkg?.holderName, customer, children);
+                return (
                 <CorrectionCard
                   key={c.id}
                   checkin={c}
-                  pkg={tickets.packages.find((p) => p.id === c.refId)}
-                  customerName={customer?.fullName}
-                  childName={children.find((k) => k.id === c.beneficiaryId)?.fullName}
+                  pkg={pkg}
+                  ownerInfo={owner}
                   busy={busy === "correct-" + c.id}
                   onCorrect={(mode, count, reason) => correctCheckin(c.id, mode, count, reason)}
                 />
-              ))}
+                );
+              })}
             </Section>
           )}
 
@@ -587,10 +598,12 @@ function TicketCard({
 
 function PackageCheckin({
   pkg,
+  ownerInfo,
   busy,
   onCheckin,
 }: {
   pkg: TicketPackage;
+  ownerInfo?: { emoji: string; label: string; tone: string };
   busy: boolean;
   onCheckin: (count: number, reason: string) => void;
 }) {
@@ -609,11 +622,17 @@ function PackageCheckin({
 
   return (
     <div className={`rounded-xl border p-3 ${expired ? "border-red-200 bg-red-50" : "border-slate-100 bg-white"}`}>
+      {ownerInfo && (
+        <div className={`mb-2 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-bold ${ownerInfo.tone}`}>
+          <span className="text-base">{ownerInfo.emoji}</span>
+          <span className="truncate">{ownerInfo.label}</span>
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <span className="text-2xl">🎟️</span>
         <div className="flex-1 min-w-0">
           <div className="truncate font-medium">
-            MS{pkg.memberCode} · {pkg.holderName || "Khách"} · Còn {pkg.remainingSessions}/{pkg.totalSessions} lượt
+            MS{pkg.memberCode} · Còn {pkg.remainingSessions}/{pkg.totalSessions} lượt
           </div>
           <div className="truncate text-xs text-slate-500">
             {audLabel} · HSD {expiry ? formatDate(expiry) : "đang cập nhật"}
@@ -782,6 +801,36 @@ function CourseAttendanceUndoCard({
   );
 }
 
+// Trả về nhãn chủ thẻ để phân biệt vé của khách vs vé của con của khách.
+function holderLabel(
+  holderKind: "USER" | "CHILD" | undefined,
+  holderId: string | undefined,
+  holderName: string | undefined,
+  customer?: User,
+  children: Child[] = [],
+): { emoji: string; label: string; tone: string } {
+  if (holderKind === "CHILD") {
+    const child = children.find((c) => c.id === holderId);
+    const name = child?.fullName || holderName || "con";
+    return {
+      emoji: "👦",
+      label: `Thẻ của CON: ${name}`,
+      tone: "bg-pink-50 text-pink-800 border border-pink-200",
+    };
+  }
+  // USER hoặc mặc định
+  const name = customer?.fullName || holderName || "khách";
+  return {
+    emoji: "🧑",
+    label: `Thẻ của CHÍNH khách: ${name}`,
+    tone: "bg-sky-50 text-sky-800 border border-sky-200",
+  };
+}
+
+function audienceLabel(a?: string): string {
+  return a === "ADULT" ? "Người lớn" : a === "CHILD_UNDER_140" ? "Trẻ <1.4m" : a === "CHILD_OVER_140" ? "Trẻ ≥1.4m" : (a ?? "");
+}
+
 function InfoLine({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -794,15 +843,13 @@ function InfoLine({ label, value }: { label: string; value: string }) {
 function CorrectionCard({
   checkin,
   pkg,
-  customerName,
-  childName,
+  ownerInfo,
   busy,
   onCorrect,
 }: {
   checkin: CheckIn;
   pkg?: TicketPackage;
-  customerName?: string;
-  childName?: string;
+  ownerInfo?: { emoji: string; label: string; tone: string };
   busy: boolean;
   onCorrect: (mode: "PARTIAL" | "CANCEL", count: number, reason: string) => void;
 }) {
@@ -813,8 +860,7 @@ function CorrectionCard({
   const [reason, setReason] = useState("");
   const disabled = busy || left <= 0 || !reason.trim();
 
-  const audLabel = pkg?.audience === "ADULT" ? "Người lớn" : pkg?.audience === "CHILD_UNDER_140" ? "Trẻ <1.4m" : pkg?.audience === "CHILD_OVER_140" ? "Trẻ ≥1.4m" : "";
-  const cardOwner = childName ? `Thẻ của ${childName} (con)` : customerName ? `Thẻ của ${customerName}` : "Thẻ vé lượt";
+  const audLabel = audienceLabel(pkg?.audience);
   const total = pkg?.totalSessions ?? "?";
   const remaining = pkg?.remainingSessions ?? "?";
   const memberCode = pkg?.memberCode ? `MS${pkg.memberCode}` : "";
@@ -822,12 +868,14 @@ function CorrectionCard({
   return (
     <div className="rounded-xl border border-red-100 bg-white p-3">
       {/* Info thẻ cụ thể - để không nhầm giữa nhiều thẻ */}
-      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
-        <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
-          <span className="text-lg">🎟️</span>
-          <span className="truncate">{cardOwner}</span>
+      {ownerInfo && (
+        <div className={`mb-2 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-bold ${ownerInfo.tone}`}>
+          <span className="text-base">{ownerInfo.emoji}</span>
+          <span className="truncate">{ownerInfo.label}</span>
         </div>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-amber-800">
+      )}
+      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-amber-800">
           {audLabel && <span>{audLabel}</span>}
           {memberCode && <span>{memberCode}</span>}
           <span>Tổng: <b>{total}</b> lượt</span>

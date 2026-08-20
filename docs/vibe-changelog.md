@@ -1,5 +1,10 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-20 (chiều)
+
+- **Điểm danh hộ — hiện rõ chủ thẻ**: mỗi thẻ (vé thời hạn, vé lượt, và card hoàn lượt) hiển thị banner màu ở trên: 🧑 xanh dương "Thẻ của CHÍNH khách: <tên>" hoặc 👦 hồng "Thẻ của CON: <tên con>". Helper `holderLabel` dò `holderKind/holderId` sang danh sách children đã tải. Bỏ tên chủ thẻ khỏi tiêu đề để tránh trùng lặp; giữ MSxxx.
+- Tiêu đề vé thời hạn chuyển ADULT/CHILD_UNDER_140... sang label tiếng Việt qua `audienceLabel`.
+
 ## 2026-08-20
 
 - **Thông báo huỷ vé/khoá cho khách**: `refundOrder` (Owner-only, khi Chủ huỷ đơn đã thanh toán) giờ trả về danh sách dịch vụ bị treo, gọi `notifyServiceCancellation` để ghi notification cho từng khách trong `users/{uid}/notifications` (type `SERVICE_CANCELLED`) kèm tên dịch vụ + lý do. Khách nhìn thấy trong mục Thông báo trên app.
