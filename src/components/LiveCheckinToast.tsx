@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { collection, onSnapshot, query, where, orderBy, Timestamp, doc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuthUser } from "@/lib/hooks/useAuthUser";
 
@@ -23,29 +23,39 @@ export function LiveCheckinToast() {
 
   useEffect(() => {
     if (!isStaff) return;
-    const q = query(
-      collection(db, "checkins"),
-      where("at", ">=", mountedAtRef.current),
-      where("result", "==", "ACCEPTED"),
-      orderBy("at", "desc"),
+    // Query đơn giản (không compound) tránh phải tạo index Firestore riêng.
+    // Lọc client-side: chỉ nhận bản ghi tạo sau mountedAt và result==ACCEPTED.
+    const q = query(collection(db, "checkins"), orderBy("at", "desc"), limit(30));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        snap.docChanges().forEach(async (chg) => {
+          if (chg.type !== "added") return;
+          const cid = chg.doc.id;
+          if (seenRef.current.has(cid)) return;
+          const c = chg.doc.data() as {
+            kind?: string;
+            refId?: string;
+            userId?: string;
+            beneficiaryId?: string;
+            groupSize?: number;
+            at?: Timestamp;
+            result?: string;
+          };
+          if (c.result !== "ACCEPTED") { seenRef.current.add(cid); return; }
+          // Bỏ qua bản ghi cũ hơn mount
+          const atMs = c.at?.toMillis?.() ?? 0;
+          if (atMs && atMs < mountedAtRef.current.toMillis()) {
+            seenRef.current.add(cid);
+            return;
+          }
+          seenRef.current.add(cid);
+          const t = await buildToast(cid, c);
+          if (t) setToasts((prev) => [t, ...prev].slice(0, 4));
+        });
+      },
+      (err) => console.error("LiveCheckinToast listener error", err),
     );
-    const unsub = onSnapshot(q, (snap) => {
-      snap.docChanges().forEach(async (chg) => {
-        if (chg.type !== "added") return;
-        const cid = chg.doc.id;
-        if (seenRef.current.has(cid)) return;
-        seenRef.current.add(cid);
-        const c = chg.doc.data() as {
-          kind?: string;
-          refId?: string;
-          userId?: string;
-          groupSize?: number;
-          at?: Timestamp;
-        };
-        const t = await buildToast(cid, c);
-        if (t) setToasts((prev) => [t, ...prev].slice(0, 4));
-      });
-    });
     return () => unsub();
   }, [isStaff]);
 
@@ -94,18 +104,24 @@ export function LiveCheckinToast() {
 
 async function buildToast(
   id: string,
-  c: { kind?: string; refId?: string; userId?: string; groupSize?: number; at?: Timestamp },
+  c: { kind?: string; refId?: string; userId?: string; beneficiaryId?: string; groupSize?: number; at?: Timestamp },
 ): Promise<Toast | null> {
   const time = c.at?.toMillis?.() ?? Date.now();
   const group = Math.max(1, Number(c.groupSize ?? 1));
 
   let customerName = "Khách hàng";
+  let childName = "";
   if (c.userId) {
     try {
       const u = await getDoc(doc(db, "users", c.userId));
       if (u.exists()) customerName = (u.data()?.fullName as string) || (u.data()?.phone as string) || customerName;
+      if (c.beneficiaryId && c.beneficiaryId !== c.userId) {
+        const ch = await getDoc(doc(db, `users/${c.userId}/children/${c.beneficiaryId}`));
+        if (ch.exists()) childName = (ch.data()?.fullName as string) || "con";
+      }
     } catch { /* ignore */ }
   }
+  const holder = childName ? `con: ${childName}` : `chính khách`;
 
   if (c.kind === "PACKAGE" && c.refId) {
     try {
@@ -117,7 +133,7 @@ async function buildToast(
           id,
           emoji: "🎟️",
           title: `${customerName} vừa vào cổng`,
-          detail: `Trừ ${group} lượt · thẻ ${audLabel ? audLabel + " · " : ""}MS${d.memberCode ?? "?"} · còn ${d.remainingSessions ?? "?"}/${d.totalSessions ?? "?"} lượt`,
+          detail: `Trừ ${group} lượt · thẻ của ${holder} · ${audLabel ? audLabel + " · " : ""}MS${d.memberCode ?? "?"} · còn ${d.remainingSessions ?? "?"}/${d.totalSessions ?? "?"}`,
           time,
         };
       }
@@ -134,7 +150,7 @@ async function buildToast(
           id,
           emoji: "🏊",
           title: `${customerName} vừa vào cổng`,
-          detail: `Vé thời hạn ${audLabel ? audLabel + " · " : ""}MS${d.memberCode ?? "?"}${d.endDate ? " · HH " + d.endDate.toDate().toLocaleDateString("vi-VN") : ""}`,
+          detail: `Vé thời hạn của ${holder} · ${audLabel ? audLabel + " · " : ""}MS${d.memberCode ?? "?"}${d.endDate ? " · HH " + d.endDate.toDate().toLocaleDateString("vi-VN") : ""}`,
           time,
         };
       }

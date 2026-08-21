@@ -254,6 +254,7 @@ async function resolveCheckin(
       }),
     });
     writeCheckin(tx, actorId, userId, d.beneficiaryId, "PACKAGE", pDoc.id, qrTokenId, groupSize, tokenRef, cid);
+    const pkgHolder = await resolveHolderText(tx, userId, p.holderKind, p.holderId);
     return {
       ok: true,
       kind: "PACKAGE",
@@ -261,10 +262,14 @@ async function resolveCheckin(
       notify: isStaffSource
         ? {
             uid: userId,
-            title: "Lễ tân đã điểm danh hộ bạn ✓",
-            body: `Trừ ${groupSize} lượt từ vé MS${p.memberCode ?? ""} · còn ${remaining}/${p.totalSessions} lượt.`,
+            title: `Lễ tân đã điểm danh hộ ${pkgHolder.forNoun} ✓`,
+            body: `Trừ ${groupSize} lượt từ vé lượt ${pkgHolder.ofPhrase} (MS${p.memberCode ?? ""}) · còn ${remaining}/${p.totalSessions} lượt.`,
           }
-        : undefined,
+        : {
+            uid: userId,
+            title: `Đã check-in ${pkgHolder.forNoun} bằng QR ✓`,
+            body: `Trừ ${groupSize} lượt từ vé lượt ${pkgHolder.ofPhrase} (MS${p.memberCode ?? ""}) · còn ${remaining}/${p.totalSessions} lượt.`,
+          },
     };
   }
 
@@ -347,6 +352,7 @@ async function resolveCheckin(
     if (m.endDate.toDate() < now)
       throw new HttpsError("failed-precondition", "Vé đã hết hạn");
     writeCheckin(tx, actorId, userId, d.beneficiaryId, "MEMBERSHIP", mDoc.id, qrTokenId, 1, tokenRef);
+    const memHolder = await resolveHolderText(tx, userId, m.holderKind, m.holderId);
     return {
       ok: true,
       kind: "MEMBERSHIP",
@@ -354,10 +360,14 @@ async function resolveCheckin(
       notify: isStaffSource
         ? {
             uid: userId,
-            title: "Lễ tân đã check-in cho bạn ✓",
-            body: `Vé thời hạn MS${m.memberCode ?? ""} · còn hiệu lực đến ${viDate(m.endDate.toDate())}.`,
+            title: `Lễ tân đã check-in ${memHolder.forNoun} ✓`,
+            body: `Vé thời hạn ${memHolder.ofPhrase} (MS${m.memberCode ?? ""}) · còn hiệu lực đến ${viDate(m.endDate.toDate())}.`,
           }
-        : undefined,
+        : {
+            uid: userId,
+            title: `Đã check-in ${memHolder.forNoun} bằng QR ✓`,
+            body: `Vé thời hạn ${memHolder.ofPhrase} (MS${m.memberCode ?? ""}) · còn hiệu lực đến ${viDate(m.endDate.toDate())}.`,
+          },
     };
   }
 
@@ -519,6 +529,26 @@ async function resolveCheckin(
     forceKind
       ? `Không tìm thấy ${forceKind === "PACKAGE" ? "vé lượt" : forceKind === "MEMBERSHIP" ? "vé thời hạn" : "khóa học"} phù hợp.`
       : "Không tìm thấy vé/gói/khóa học hợp lệ. Vui lòng mua vé tại quầy.");
+}
+
+// Trả về text mô tả chủ thẻ dùng trong thông báo:
+//  { forNoun: "bé Bin" | "bạn", ofPhrase: "của con: bé Bin" | "của chính bạn" }
+async function resolveHolderText(
+  tx: FirebaseFirestore.Transaction,
+  ownerUid: string,
+  holderKind?: string,
+  holderId?: string,
+): Promise<{ forNoun: string; ofPhrase: string }> {
+  if (holderKind === "CHILD" && holderId) {
+    try {
+      const c = await tx.get(db().doc(`users/${ownerUid}/children/${holderId}`));
+      const name = (c.data()?.fullName as string) || "con của bạn";
+      return { forNoun: `bé ${name}`, ofPhrase: `của con: ${name}` };
+    } catch {
+      return { forNoun: "con của bạn", ofPhrase: "của con của bạn" };
+    }
+  }
+  return { forNoun: "bạn", ofPhrase: "của chính bạn" };
 }
 
 function writeCheckin(
@@ -937,13 +967,25 @@ export const correctPackageCheckin = onCall({ region: REGION }, async (req) => {
       at: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    return { userId: c.userId as string, refundCount: count, remaining: after, originalCount, refundedTotal: alreadyRefunded + count };
+    return { userId: c.userId as string, packageId: c.refId as string, refundCount: count, remaining: after, originalCount, refundedTotal: alreadyRefunded + count };
   });
 
   try {
+    // Tra thẻ để biết chủ thẻ (con nào / chính khách) + memberCode
+    const pkgSnap = await db().doc(`ticketPackages/${result.packageId ?? ""}`).get().catch(() => null);
+    const p = pkgSnap?.data() ?? {};
+    let holderPhrase = "của chính bạn";
+    if (p.holderKind === "CHILD" && p.holderId) {
+      try {
+        const c = await db().doc(`users/${result.userId}/children/${p.holderId}`).get();
+        const name = (c.data()?.fullName as string) || "con của bạn";
+        holderPhrase = `của con: ${name}`;
+      } catch { /* ignore */ }
+    }
+    const memCode = p.memberCode ? ` (MS${p.memberCode})` : "";
     await db().collection("users").doc(result.userId).collection("notifications").add({
       title: "Đã hoàn lại lượt bơi",
-      body: `Hồ bơi đã hoàn lại ${result.refundCount} lượt. Hiện còn ${result.remaining} lượt.`,
+      body: `Hồ bơi đã hoàn ${result.refundCount} lượt vào vé lượt ${holderPhrase}${memCode}. Hiện còn ${result.remaining} lượt.`,
       type: "GENERAL",
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),

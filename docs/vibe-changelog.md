@@ -1,5 +1,11 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-21
+
+- **Pop-up realtime hoạt động cả khi khách tự quét QR**: `LiveCheckinToast` đổi sang query đơn giản `orderBy at desc limit 30` + lọc client-side theo `mountedAt` và `result==ACCEPTED` để không phụ thuộc composite index Firestore. Kèm mô tả chủ thẻ (chính khách / con: <tên>) trong toast.
+- **Hoạt động realtime chi tiết + lọc theo ngày**: `ActivityLog` rewrite lớn. Query `where at ∈ [ngày, ngày+1)`, ô chọn ngày + nút Hôm nay / Hôm qua + tùy chọn "Xem tất cả". Xây `buildDetail(log)` dựng câu tiếng Việt cụ thể (số tiền, lý do, HLV, category chi tiêu, số lượt hoàn, ...); ẩn dòng "Actor / Target" thô. Hiện badge vai trò (Chủ / Lễ tân) trước tên. Cuộn trong khung, tối đa 200 bản ghi/ngày.
+- **Thông báo khách chi tiết hơn**: server-side (`checkin.ts`) thêm helper `resolveHolderText` chạy trong transaction để tra tên con. Notifications giờ ghi rõ "vé lượt **của con: Bin** (MS154)" hoặc "vé lượt **của chính bạn**" cho các sự kiện: khách tự quét QR + Lễ tân điểm danh hộ + Hoàn lượt sau sửa sai. Áp dụng cho cả `PACKAGE` và `MEMBERSHIP`.
+
 ## 2026-08-20 (chiều)
 
 - **Điểm danh hộ — hiện rõ chủ thẻ**: mỗi thẻ (vé thời hạn, vé lượt, và card hoàn lượt) hiển thị banner màu ở trên: 🧑 xanh dương "Thẻ của CHÍNH khách: <tên>" hoặc 👦 hồng "Thẻ của CON: <tên con>". Helper `holderLabel` dò `holderKind/holderId` sang danh sách children đã tải. Bỏ tên chủ thẻ khỏi tiêu đề để tránh trùng lặp; giữ MSxxx.
