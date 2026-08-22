@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { Notification } from "@/types";
-import { formatDate } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import { BackButton } from "@/components/BackButton";
 
 const ICONS: Record<string, string> = {
@@ -39,7 +39,7 @@ export default function NotificationsPage() {
             <div className="flex-1">
               <div className="font-semibold">{n.title}</div>
               <div className="text-sm text-slate-600">{n.body}</div>
-              <div className="mt-1 text-xs text-slate-400">{formatDate(n.createdAt)}</div>
+              <div className="mt-1 text-xs text-slate-400">{formatDateTime(n.createdAt)}</div>
             </div>
             {!n.read && <span className="mt-1 size-2 rounded-full bg-red-500" />}
           </button>

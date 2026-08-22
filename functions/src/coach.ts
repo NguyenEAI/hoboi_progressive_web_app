@@ -127,19 +127,33 @@ export const reportCoachAbsence = onCall({ region: REGION }, async (req) => {
   });
 
   const targetUids: string[] = [];
+  const WEEKDAY_LABELS = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+  const weekdayLabel = WEEKDAY_LABELS[weekday] ?? "";
+  const shiftText = `${String(startHour).padStart(2, "0")}h00–${String(startHour + 1).padStart(2, "0")}h00`;
+  const trimmedReason = (reason ?? "").trim();
+  const totalStudents = enrolls.size;
+
   for (const eDoc of enrolls.docs) {
     const ed = eDoc.data();
     const targetUid = (ed.parentId as string | undefined) ?? (ed.studentId as string);
     if (!targetUid) continue;
     targetUids.push(targetUid);
+    const studentName = (ed.studentName as string) || "học viên";
+    const memberCode = ed.memberCode ? ` (MS${ed.memberCode})` : "";
     const notifRef = db()
       .collection("users")
       .doc(targetUid)
       .collection("notifications")
       .doc();
     batch.set(notifRef, {
-      title: `${coachName} báo nghỉ ngày ${formatVnDate(date)}`,
-      body: `Ca ${startHour}h–${startHour + 1}h${(reason ?? "").trim() ? " · " + reason : ""}. Vui lòng đợi lịch bù.`,
+      title: `🏊 HLV ${coachName} báo nghỉ`,
+      body:
+        `Buổi học của ${studentName}${memberCode} bị huỷ:\n` +
+        `• Ngày: ${weekdayLabel}, ${formatVnDate(date)}\n` +
+        `• Ca: ${shiftText}\n` +
+        `• HLV: ${coachName}\n` +
+        (trimmedReason ? `• Lý do: ${trimmedReason}\n` : "") +
+        `Buổi này KHÔNG bị trừ. Vui lòng đợi hồ bơi thông báo lịch bù, hoặc gọi Lễ tân để xếp lại.`,
       type: "COACH_OFF",
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -161,8 +175,8 @@ export const reportCoachAbsence = onCall({ region: REGION }, async (req) => {
       await admin.messaging().sendEachForMulticast({
         tokens,
         notification: {
-          title: `${coachName} báo nghỉ ngày ${formatVnDate(date)}`,
-          body: `Ca ${startHour}h–${startHour + 1}h`,
+          title: `🏊 HLV ${coachName} báo nghỉ ${weekdayLabel}, ${formatVnDate(date)}`,
+          body: `Ca ${shiftText}${trimmedReason ? " · " + trimmedReason : ""}. Buổi này không bị trừ.`,
         },
       });
   } catch (e) {

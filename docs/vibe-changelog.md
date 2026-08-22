@@ -1,5 +1,13 @@
 # Sổ thay đổi app hồ bơi
 
+## 2026-08-22
+
+- **Lý do lễ tân điểm danh hộ**: notification `staffCheckinByPhone` (PACKAGE + MEMBERSHIP) giờ ghi kèm dòng "Lý do lễ tân ghi: ..." nếu có.
+- **Giờ đầy đủ trong thông báo**: thêm `formatDateTime` (`dd/mm/yyyy HH:MM:SS`) vào `utils`. Trang Thông báo của khách đổi từ `formatDate` sang `formatDateTime` — giờ hiện cả giờ phút giây.
+- **HLV báo nghỉ chi tiết**: `reportCoachAbsence` viết lại notification body dạng nhiều dòng: tên học viên + MSxxx, thứ trong tuần, ngày, ca (HH:00–HH:00), tên HLV, lý do, kèm ghi chú "buổi này không bị trừ". Push FCM cũng có thứ + ca rõ ràng.
+- **Nút Quét QR ở BottomNav mới**: to hơn (16×16), viền trắng dày, gradient đậm hơn, có halo animate + chữ "QUÉT QR" dưới nút, dễ thấy khi dùng ngoài trời.
+- **Mã QR không tràn viền điện thoại**: `/admin/qr-gate` và `/admin/course-qr` bỏ `size={420}` cố định, đổi sang khung `aspect-square w-[min(78vw,420px)]` — QR co giãn theo màn hình, trên điện thoại nhỏ vẫn thấy đủ 4 góc.
+
 ## 2026-08-21
 
 - **Pop-up realtime hoạt động cả khi khách tự quét QR**: `LiveCheckinToast` đổi sang query đơn giản `orderBy at desc limit 30` + lọc client-side theo `mountedAt` và `result==ACCEPTED` để không phụ thuộc composite index Firestore. Kèm mô tả chủ thẻ (chính khách / con: <tên>) trong toast.

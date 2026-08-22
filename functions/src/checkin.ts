@@ -255,6 +255,7 @@ async function resolveCheckin(
     });
     writeCheckin(tx, actorId, userId, d.beneficiaryId, "PACKAGE", pDoc.id, qrTokenId, groupSize, tokenRef, cid);
     const pkgHolder = await resolveHolderText(tx, userId, p.holderKind, p.holderId);
+    const staffReason = String(d.reason ?? "").trim();
     return {
       ok: true,
       kind: "PACKAGE",
@@ -263,7 +264,7 @@ async function resolveCheckin(
         ? {
             uid: userId,
             title: `Lễ tân đã điểm danh hộ ${pkgHolder.forNoun} ✓`,
-            body: `Trừ ${groupSize} lượt từ vé lượt ${pkgHolder.ofPhrase} (MS${p.memberCode ?? ""}) · còn ${remaining}/${p.totalSessions} lượt.`,
+            body: `Trừ ${groupSize} lượt từ vé lượt ${pkgHolder.ofPhrase} (MS${p.memberCode ?? ""}) · còn ${remaining}/${p.totalSessions} lượt.${staffReason ? ` Lý do lễ tân ghi: ${staffReason}.` : ""}`,
           }
         : {
             uid: userId,
@@ -353,6 +354,7 @@ async function resolveCheckin(
       throw new HttpsError("failed-precondition", "Vé đã hết hạn");
     writeCheckin(tx, actorId, userId, d.beneficiaryId, "MEMBERSHIP", mDoc.id, qrTokenId, 1, tokenRef);
     const memHolder = await resolveHolderText(tx, userId, m.holderKind, m.holderId);
+    const memStaffReason = String(d.reason ?? "").trim();
     return {
       ok: true,
       kind: "MEMBERSHIP",
@@ -361,7 +363,7 @@ async function resolveCheckin(
         ? {
             uid: userId,
             title: `Lễ tân đã check-in ${memHolder.forNoun} ✓`,
-            body: `Vé thời hạn ${memHolder.ofPhrase} (MS${m.memberCode ?? ""}) · còn hiệu lực đến ${viDate(m.endDate.toDate())}.`,
+            body: `Vé thời hạn ${memHolder.ofPhrase} (MS${m.memberCode ?? ""}) · còn hiệu lực đến ${viDate(m.endDate.toDate())}.${memStaffReason ? ` Lý do lễ tân ghi: ${memStaffReason}.` : ""}`,
           }
         : {
             uid: userId,

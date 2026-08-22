@@ -58,11 +58,13 @@ export default function CourseQrPage() {
 
       <div className="flex flex-1 items-center justify-center">
         <div className="flex flex-col items-center">
-          <div className="rounded-[2rem] bg-white p-8 shadow-2xl ring-8 ring-cyan-200/30">
+          <div className="rounded-[2rem] bg-white p-4 shadow-2xl ring-8 ring-cyan-200/30 sm:p-6 md:p-8">
             {token ? (
-              <QRCodeSVG value={token} size={420} level="M" />
+              <div className="mx-auto aspect-square w-[min(78vw,420px)]">
+                <QRCodeSVG value={token} level="M" className="h-full w-full" />
+              </div>
             ) : (
-              <div className="flex size-[420px] items-center justify-center text-slate-400">Đang tạo mã…</div>
+              <div className="mx-auto flex aspect-square w-[min(78vw,420px)] items-center justify-center text-slate-400">Đang tạo mã…</div>
             )}
           </div>
           <div className="mt-6 text-center">

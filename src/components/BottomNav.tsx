@@ -21,14 +21,19 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Floating CTA Check-in QR */}
+      {/* Floating CTA Check-in QR — nút chính, nổi bật */}
       <Link
         href="/checkin"
         aria-label="Quét QR check-in"
-        className="absolute left-1/2 -top-7 z-10 flex h-15 w-15 -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 via-brand-600 to-brand-700 text-white shadow-[0_8px_20px_rgba(5,150,105,0.4)] ring-4 ring-white transition-all duration-200 active:scale-90"
+        className="group absolute left-1/2 -top-8 z-10 flex flex-col items-center -translate-x-1/2"
       >
-        <span aria-hidden className="nav-halo" />
-        <QrCode className="size-6.5 text-white" strokeWidth={2.4} />
+        <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-brand-600 to-brand-800 text-white shadow-[0_10px_25px_-4px_rgba(5,150,105,0.55)] ring-[5px] ring-white transition-all duration-200 group-active:scale-90 group-hover:shadow-[0_14px_30px_-4px_rgba(5,150,105,0.7)]">
+          <span aria-hidden className="absolute inset-0 rounded-full bg-white/10 animate-ping opacity-40" />
+          <QrCode className="relative size-8 text-white drop-shadow" strokeWidth={2.5} />
+        </span>
+        <span className="mt-1 text-[10px] font-black uppercase tracking-wider text-brand-700">
+          Quét QR
+        </span>
       </Link>
 
       {/* Bar with smooth glassmorphism */}
@@ -37,7 +42,7 @@ export function BottomNav() {
           {left.map((it) => (
             <NavItem key={it.href} item={it} active={p.startsWith(it.href)} />
           ))}
-          <li aria-hidden className="h-12" />
+          <li aria-hidden className="h-16" />
           {right.map((it) => (
             <NavItem key={it.href} item={it} active={p.startsWith(it.href)} />
           ))}
