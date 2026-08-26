@@ -96,6 +96,13 @@ export function AdminSidebar({
         <div className="mb-2 font-bold text-brand-100 text-[11px] uppercase tracking-wider">
           {profile?.fullName} <span className="opacity-60">· {profile?.role}</span>
         </div>
+        <Link
+          href="/account/password"
+          onClick={onCloseMobile}
+          className="mb-2 block w-full rounded-xl border border-brand-700/50 bg-brand-800/45 px-3.5 py-2.5 text-center text-[11.5px] font-bold uppercase tracking-wider text-brand-100 transition-all hover:bg-brand-700/60 hover:text-white"
+        >
+          🔑 Đổi mật khẩu
+        </Link>
         <button
           onClick={async () => { await signOut(auth); router.replace("/"); }}
           className="w-full rounded-xl bg-brand-800/60 px-3.5 py-2.5 text-center font-bold text-[11.5px] uppercase tracking-wider text-rose-200 hover:bg-rose-900/40 hover:text-white transition-all border border-rose-950/20"

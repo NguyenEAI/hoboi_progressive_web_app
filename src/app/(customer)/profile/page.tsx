@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { useToast } from "@/components/Toast";
-import { CreditCard, Baby, Bell, ShoppingBag, LogOut, ChevronRight, Pencil, Share, Plus } from "lucide-react";
+import { CreditCard, Baby, Bell, ShoppingBag, LogOut, ChevronRight, Pencil, Share, Plus, KeyRound } from "lucide-react";
 
 export default function ProfilePage() {
   const { profile, loading } = useAuthUser();
@@ -94,6 +94,7 @@ export default function ProfilePage() {
         <Item href="/children" icon={<Baby className="size-5" />} label="Con của tôi" />
         <Item href="/notifications" icon={<Bell className="size-5" />} label="Thông báo" />
         <Item href="/services" icon={<ShoppingBag className="size-5" />} label="Mua dịch vụ & khóa bơi" />
+        <Item href="/account/password" icon={<KeyRound className="size-5" />} label="Đổi mật khẩu" />
 
         {isIOS && !isStandalone && (
           <div className="card mt-5 animate-fade-up border border-brand-100 bg-gradient-to-br from-brand-50/50 to-white p-5 shadow-sm">

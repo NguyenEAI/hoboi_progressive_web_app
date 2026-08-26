@@ -2,6 +2,15 @@
 
 > Tài liệu nội bộ. Bám hướng anh Nguyên đã chốt: dùng giao diện có sẵn làm nền, nâng cấp màn quầy sang xịn, đủ tính năng như app bán hàng kết hợp app quản lý.
 
+## Đổi mật khẩu cho mọi vai — 2026-08-26
+
+- [x] Tạo một màn đổi mật khẩu dùng chung cho tài khoản đang đăng nhập.
+- [x] Bắt buộc nhập đúng mật khẩu hiện tại trước khi cho đặt mật khẩu mới.
+- [x] Chặn mật khẩu mới dưới 6 ký tự, trùng mật khẩu cũ hoặc hai lần nhập không khớp.
+- [x] Thêm lối “Đổi mật khẩu” trong Hồ sơ khách, menu Chủ/lễ tân và đầu trang HLV.
+- [x] Giữ nguyên tài khoản, vai trò và phiên đăng nhập sau khi đổi thành công.
+- [x] Kiểm tra lại toàn bộ bản app và xác nhận màn đổi mật khẩu được tạo thành công.
+
 ## Quên mật khẩu bằng OTP + giữ phiên 15 ngày — 2026-08-26
 
 - [x] Rà lại luồng SĐT + mật khẩu và luồng OTP đặt lại mật khẩu hiện có.

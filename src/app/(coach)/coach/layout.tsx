@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { cn } from "@/lib/utils";
-import { LogOut } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 const tabs = [
@@ -29,13 +29,22 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
           <Logo size={28} />
           <span className="text-sm font-bold text-brand-700">HLV</span>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-          aria-label="Đăng xuất"
-        >
-          <LogOut className="size-3.5" /> Đăng xuất
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/account/password"
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+            aria-label="Đổi mật khẩu"
+          >
+            <KeyRound className="size-3.5" /> Đổi mật khẩu
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+            aria-label="Đăng xuất"
+          >
+            <LogOut className="size-3.5" /> Đăng xuất
+          </button>
+        </div>
       </header>
       {children}
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t bg-white">

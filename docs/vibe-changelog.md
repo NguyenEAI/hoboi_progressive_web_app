@@ -2,6 +2,7 @@
 
 ## 2026-08-26
 
+- **Đổi mật khẩu cho mọi vai**: thêm chỗ đổi mật khẩu trong Hồ sơ khách, menu Chủ/lễ tân và khu HLV. Người dùng phải nhập đúng mật khẩu hiện tại, nhập mật khẩu mới hai lần giống nhau; đổi xong vẫn giữ đúng tài khoản và vai trò.
 - **Quên mật khẩu bằng OTP**: rà lại toàn bộ luồng hiện có; khách nhập SĐT, nhận mã Firebase, nhập đúng mã rồi đặt mật khẩu mới. Phía server chỉ cho đổi khi SĐT trong phiên OTP khớp đúng SĐT cần đặt lại.
 - **Giữ đăng nhập khi đóng/mở app**: bật chế độ lưu phiên lâu dài trên thiết bị để người dùng không phải đăng nhập lại sau mỗi lần tắt app.
 - **Tự hết phiên sau 15 ngày không dùng**: lưu mốc hoạt động riêng cho từng tài khoản; nếu quá 15 ngày không mở/dùng app thì tự đăng xuất. Khi đang dùng, mốc hoạt động được cập nhật có giới hạn để không ghi liên tục.
