@@ -13,7 +13,7 @@ import {
   type User,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase/client";
+import { auth, authPersistenceReady, db } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { WavePattern, FloatingOrbs } from "@/components/Decorations";
@@ -162,6 +162,7 @@ export default function SignInPage() {
     setBusy(true);
     setHelp("");
     try {
+      await authPersistenceReady;
       const { user } = await signInWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
       await ensureCustomerProfile(user, currentPhone);
       const profile = await getDoc(doc(db, "users", user.uid));
@@ -190,6 +191,7 @@ export default function SignInPage() {
     setHelp("");
     let createdForCleanup: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>["user"] | null = null;
     try {
+      await authPersistenceReady;
       await prepareCustomerRegistration({ phone: currentPhone });
       const created = await createUserWithEmailAndPassword(auth, phoneLoginEmail(currentPhone), password);
       createdForCleanup = created.user;
@@ -217,6 +219,7 @@ export default function SignInPage() {
     setBusy(true);
     setHelp("");
     try {
+      await authPersistenceReady;
       const result = await signInWithPhoneNumber(auth, normalizeVNPhone(currentPhone), getRecaptchaVerifier());
       setConfirm(result);
       resetCaptcha();
@@ -282,6 +285,7 @@ export default function SignInPage() {
     setBusy(true);
     setHelp("");
     try {
+      await authPersistenceReady;
       const { user } = await signInAnonymously(auth);
       await setDoc(doc(db, "users", user.uid), {
         id: user.uid,

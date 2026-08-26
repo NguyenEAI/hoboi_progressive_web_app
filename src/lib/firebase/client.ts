@@ -1,6 +1,6 @@
 // Firebase client SDK — khởi tạo 1 lần, dùng toàn app.
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, setPersistence, type Auth } from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
@@ -22,6 +22,13 @@ const firebaseConfig = {
 
 export const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
+// Giữ đăng nhập khi đóng/mở lại app. Nếu trình duyệt chặn bộ nhớ lâu dài,
+// Firebase sẽ giữ cơ chế mặc định thay vì làm hỏng luồng đăng nhập.
+export const authPersistenceReady = typeof window === "undefined"
+  ? Promise.resolve()
+  : setPersistence(auth, browserLocalPersistence).catch((error) => {
+      console.warn("Không bật được chế độ giữ đăng nhập lâu dài", error);
+    });
 
 if (process.env.NEXT_PUBLIC_E2E_DISABLE_APP_VERIFICATION === "1") {
   auth.settings.appVerificationDisabledForTesting = true;

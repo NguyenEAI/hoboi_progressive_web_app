@@ -2,6 +2,16 @@
 
 > Tài liệu nội bộ. Bám hướng anh Nguyên đã chốt: dùng giao diện có sẵn làm nền, nâng cấp màn quầy sang xịn, đủ tính năng như app bán hàng kết hợp app quản lý.
 
+## Quên mật khẩu bằng OTP + giữ phiên 15 ngày — 2026-08-26
+
+- [x] Rà lại luồng SĐT + mật khẩu và luồng OTP đặt lại mật khẩu hiện có.
+- [x] Xác nhận phía server chỉ đổi mật khẩu khi tài khoản vừa xác minh OTP có đúng SĐT cần đặt lại.
+- [x] Bật lưu phiên lâu dài để đóng/mở lại app không phải đăng nhập lại.
+- [x] Lưu mốc hoạt động theo từng tài khoản và tự đăng xuất khi không dùng quá 15 ngày.
+- [x] Giới hạn ghi mốc hoạt động tối đa một lần/phút để tránh ghi bộ nhớ liên tục.
+- [x] Thêm kiểm thử ranh giới 15 ngày, lưu/xóa mốc hoạt động và giới hạn tần suất ghi.
+- [x] Kiểm tra lại màn đăng nhập/quên mật khẩu và toàn bộ bản app sau thay đổi.
+
 ## Nâng cấp trải nghiệm HLV — 2026-07-31
 
 - [x] Chỉ chỉnh khu vực `/coach` và tài liệu; không đụng data semantics, quyền điểm danh, QR/check-in, Owner pages, auth hoặc deploy.
