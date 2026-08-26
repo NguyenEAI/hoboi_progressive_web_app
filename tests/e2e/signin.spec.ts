@@ -37,4 +37,18 @@ test.describe("Sign-in (phone + password)", () => {
     await expect(page.getByText(/tick ô xác nhận bảo mật/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /tick xác nhận bảo mật trước|gửi mã đặt lại mật khẩu/i })).toBeVisible();
   });
+
+  test("SI-05 · Closing and reopening the app keeps the signed-in customer", async ({ page, context }) => {
+    const customer = getPasswordUser("customer");
+    test.skip(!customer, missingCredentialsReason("customer"));
+
+    await signInWithPassword(page, customer!);
+    await expect(page).toHaveURL(/\/home/, { timeout: 15_000 });
+    await page.close();
+
+    const reopened = await context.newPage();
+    await reopened.goto("/home");
+    await expect(reopened).toHaveURL(/\/home/, { timeout: 15_000 });
+    await expect(reopened.getByText(/đăng nhập/i)).toHaveCount(0);
+  });
 });
