@@ -11,6 +11,7 @@
 - [x] Giới hạn ghi mốc hoạt động tối đa một lần/phút để tránh ghi bộ nhớ liên tục.
 - [x] Thêm kiểm thử ranh giới 15 ngày, lưu/xóa mốc hoạt động và giới hạn tần suất ghi.
 - [x] Kiểm tra lại màn đăng nhập/quên mật khẩu và toàn bộ bản app sau thay đổi.
+- [x] Thử OTP thật với số được anh Nguyên đồng ý: nhận mã, đổi mật khẩu, vào app và đóng/mở lại vẫn giữ đăng nhập.
 
 ## Nâng cấp trải nghiệm HLV — 2026-07-31
 
